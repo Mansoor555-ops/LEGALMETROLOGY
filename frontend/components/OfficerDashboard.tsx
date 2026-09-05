@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Camera, Zap, ShieldCheck, AlertTriangle, FileText, CheckCircle2, ArrowRight, RefreshCw, Layers } from 'lucide-react';
+import { Camera, Zap, ShieldCheck, AlertTriangle, FileText, CheckCircle2, ArrowRight, RefreshCw, Layers, Loader2 } from 'lucide-react';
 import UnifiedAutoScanner from './UnifiedAutoScanner';
 import OfficerInspectionForm from './OfficerInspectionForm';
 import { getApiBaseUrl } from '@/utils/api';
@@ -17,6 +17,8 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
   const [showForm, setShowForm] = useState(false);
   const [inspections, setInspections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fetchRecentInspections = async () => {
     setLoading(true);
@@ -39,13 +41,15 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
 
   const handleScanCompleteFromScanner = async (files: File[]) => {
     setShowAutoScanner(false);
-
     if (!files || files.length === 0) return;
+
+    setIsAnalyzing(true);
+    setErrorMsg(null);
 
     // Auto submit to inspection API
     const formData = new FormData();
     formData.append('shop_name', 'Verified Field Inspection Site');
-    formData.append('location', session?.location || 'Field Location');
+    formData.append('location', session?.location || 'Field Site Location');
     formData.append('category', 'Packaged Food');
     formData.append('net_quantity', '');
     formData.append('is_institutional', 'false');
@@ -70,14 +74,22 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
         method: 'POST',
         body: formData
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          onSelectInspection(data.inspection);
-        }
+
+      setIsAnalyzing(false);
+
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status} error during evaluation`);
       }
-    } catch (err) {
-      console.error("Auto inspection submit error:", err);
+
+      const data = await res.json();
+      if (data.success && data.inspection) {
+        onSelectInspection(data.inspection);
+      } else {
+        setErrorMsg(data.message || 'Inspection processing failed. Please try again.');
+      }
+    } catch (err: any) {
+      setIsAnalyzing(false);
+      setErrorMsg(err.message || 'Error connecting to Legal Metrology enforcement server.');
     }
   };
 
@@ -88,12 +100,52 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Fullscreen Analyzing Overlay HUD */}
+      {isAnalyzing && (
+        <div className="fixed inset-0 bg-slate-950/90 z-50 flex flex-col items-center justify-center p-6 text-white text-center select-none backdrop-blur-md">
+          <div className="bg-slate-900 border border-slate-700 p-8 rounded-2xl max-w-md w-full shadow-2xl space-y-5">
+            <Loader2 className="w-12 h-12 text-emerald-400 animate-spin mx-auto" />
+            <div className="space-y-2">
+              <h3 className="text-lg font-extrabold text-white flex items-center justify-center gap-2">
+                <Zap className="w-5 h-5 fill-emerald-400 text-emerald-400" />
+                EVALUATING PACKAGED COMMODITY
+              </h3>
+              <p className="text-xs text-slate-300">
+                Running Optical Character Recognition (OCR), region segmentation, and Rule 6 compliance check across snapped label photos...
+              </p>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+              <div className="bg-emerald-400 h-full w-3/4 animate-pulse"></div>
+            </div>
+            <p className="text-[11px] font-mono text-emerald-400">
+              Checking MRP • Net Quantity • Mfg Date • Manufacturer Address
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Scanner Modal Launcher */}
       {showAutoScanner && (
         <UnifiedAutoScanner
           onScanComplete={handleScanCompleteFromScanner}
           onClose={() => setShowAutoScanner(false)}
         />
+      )}
+
+      {/* Error Alert Notification Banner */}
+      {errorMsg && (
+        <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl text-xs flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+          <button
+            onClick={() => setErrorMsg(null)}
+            className="text-slate-500 hover:text-slate-800 font-bold px-2"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       {/* Main Hero Card for Field Officer */}
