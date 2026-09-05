@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, X, Zap, Sparkles, CheckCircle2, AlertTriangle, Trash2, Plus, RefreshCw, HelpCircle } from 'lucide-react';
+import { Camera, X, Zap, Sparkles, CheckCircle2, AlertTriangle, Trash2, Plus, RefreshCw, HelpCircle, Sun, Flashlight } from 'lucide-react';
 import { performLiveCheck, fetchPanelExpectations, LiveCheckDetectedField } from '@/utils/api';
 
 interface SmartCaptureCameraProps {
@@ -20,10 +20,16 @@ export default function SmartCaptureCamera({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const nativeInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
   const [cameraSupported, setCameraSupported] = useState<boolean>(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+
+  // Torch / Flashlight Auto & Manual State
+  const [torchActive, setTorchActive] = useState<boolean>(false);
+  const [torchSupported, setTorchSupported] = useState<boolean>(false);
+  const [autoTorchTriggered, setAutoTorchTriggered] = useState<boolean>(false);
 
   // Snapped Multi-Photo State
   const [snappedFiles, setSnappedFiles] = useState<File[]>([]);
@@ -43,6 +49,25 @@ export default function SmartCaptureCamera({
   const [expectedFields, setExpectedFields] = useState<string[]>(['mrp', 'net_quantity', 'generic_name']);
   const [showTimeoutWarning, setShowTimeoutWarning] = useState<boolean>(false);
 
+  // Toggle Torch Constraints Helper
+  const setTorchState = async (stream: MediaStream, enable: boolean) => {
+    try {
+      const track = stream.getVideoTracks()[0];
+      if (track && 'applyConstraints' in track) {
+        const capabilities: any = track.getCapabilities ? track.getCapabilities() : {};
+        if (capabilities && (capabilities.torch || 'torch' in capabilities)) {
+          setTorchSupported(true);
+          await track.applyConstraints({
+            advanced: [{ torch: enable } as any]
+          });
+          setTorchActive(enable);
+        }
+      }
+    } catch (e) {
+      console.log('Torch constraint application note:', e);
+    }
+  };
+
   // Initialize Camera Stream
   useEffect(() => {
     let activeStream: MediaStream | null = null;
@@ -60,15 +85,23 @@ export default function SmartCaptureCamera({
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         activeStream = stream;
+        mediaStreamRef.current = stream;
 
         const track = stream.getVideoTracks()[0];
-        if (track && 'applyConstraints' in track) {
-          try {
-            await track.applyConstraints({
-              advanced: [{ focusMode: 'continuous' } as any]
-            });
-          } catch (e) {
-            console.log('Focus constraint note:', e);
+        if (track) {
+          const capabilities: any = track.getCapabilities ? track.getCapabilities() : {};
+          if (capabilities && (capabilities.torch || 'torch' in capabilities)) {
+            setTorchSupported(true);
+          }
+
+          if ('applyConstraints' in track) {
+            try {
+              await track.applyConstraints({
+                advanced: [{ focusMode: 'continuous' } as any]
+              });
+            } catch (e) {
+              console.log('Focus constraint note:', e);
+            }
           }
         }
 
@@ -94,6 +127,7 @@ export default function SmartCaptureCamera({
 
     return () => {
       if (activeStream) {
+        setTorchState(activeStream, false);
         activeStream.getTracks().forEach(t => t.stop());
       }
     };
@@ -107,11 +141,11 @@ export default function SmartCaptureCamera({
     return () => clearTimeout(timer);
   }, []);
 
-  // Frame Quality Analysis Loop (Laplacian Variance, 4 FPS / 250ms)
+  // Frame Quality Analysis Loop (Laplacian Variance, 4 FPS / 250ms) + Auto Torch Trigger
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
-    const analyzeFrame = () => {
+    const analyzeFrame = async () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas || video.readyState !== 4) return;
@@ -166,6 +200,12 @@ export default function SmartCaptureCamera({
       setBlurScore(variance);
       setBrightnessScore(meanBrightness);
 
+      // 3. AUTO TORCH TRIGGER: If low light detected (< 45.0 brightness) and torch not yet auto-enabled
+      if (meanBrightness < 45.0 && !autoTorchTriggered && mediaStreamRef.current) {
+        setAutoTorchTriggered(true);
+        await setTorchState(mediaStreamRef.current, true);
+      }
+
       const isBlurry = variance < 30.0;
       const isTooDark = meanBrightness < 30.0;
       const isTooBright = meanBrightness > 235.0;
@@ -177,7 +217,7 @@ export default function SmartCaptureCamera({
         setQualityStatus('poor');
         const msgs = [];
         if (isBlurry) msgs.push(`Blurry (${variance.toFixed(1)})`);
-        if (isTooDark) msgs.push('Too Dark');
+        if (isTooDark) msgs.push('Low Light');
         if (isTooBright) msgs.push('Overexposed');
         setQualityMessage(`POOR QUALITY: ${msgs.join(', ')} — Hold Steady`);
       }
@@ -185,7 +225,7 @@ export default function SmartCaptureCamera({
 
     intervalId = setInterval(analyzeFrame, 250);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [autoTorchTriggered]);
 
   // Live Field-Detection Checklist Polling Loop (~1.5s interval)
   useEffect(() => {
@@ -219,6 +259,12 @@ export default function SmartCaptureCamera({
     liveCheckInterval = setInterval(runLiveCheck, 1500);
     return () => clearInterval(liveCheckInterval);
   }, [panelName, category, qualityStatus]);
+
+  const handleManualTorchToggle = () => {
+    if (mediaStreamRef.current) {
+      setTorchState(mediaStreamRef.current, !torchActive);
+    }
+  };
 
   // Execute Photo Capture with Quality Gating
   const triggerPhotoCapture = () => {
@@ -301,12 +347,29 @@ export default function SmartCaptureCamera({
             Multi-angle quality-gated capture for Legal Metrology (2011) compliance checking
           </p>
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 bg-slate-800 rounded-full text-white hover:bg-slate-700 transition-colors cursor-pointer"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        
+        <div className="flex items-center gap-3">
+          {/* Torch Manual Toggle Button */}
+          <button
+            type="button"
+            onClick={handleManualTorchToggle}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors ${
+              torchActive
+                ? 'bg-amber-500 text-black border-amber-300 font-extrabold shadow-lg animate-pulse'
+                : 'bg-slate-800 text-amber-300 border-slate-700 hover:bg-slate-700'
+            }`}
+          >
+            <Zap className={`w-3.5 h-3.5 ${torchActive ? 'fill-black' : 'fill-amber-400'}`} />
+            <span>{torchActive ? 'Torch ON' : 'Torch OFF'}</span>
+          </button>
+
+          <button
+            onClick={onClose}
+            className="p-2 bg-slate-800 rounded-full text-white hover:bg-slate-700 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Main Viewfinder Area */}
@@ -386,9 +449,17 @@ export default function SmartCaptureCamera({
               </div>
             )}
 
+            {/* Auto Torch Indicator Notification */}
+            {autoTorchTriggered && (
+              <div className="absolute top-3 right-3 bg-amber-950/90 border border-amber-500/60 rounded-xl px-3 py-1.5 text-[10px] font-extrabold text-amber-300 backdrop-blur-md flex items-center gap-1.5 shadow-lg">
+                <Zap className="w-3.5 h-3.5 fill-amber-400 animate-pulse text-amber-400" />
+                <span>AUTO-TORCH ACTIVATED (LOW LIGHT)</span>
+              </div>
+            )}
+
             {/* 15s Timeout Warning Fallback */}
             {showTimeoutWarning && (
-              <div className="absolute top-14 right-3 bg-slate-900/90 border border-amber-500/50 rounded-lg px-3 py-1.5 text-[11px] text-amber-300 backdrop-blur-md max-w-xs flex items-center gap-1.5">
+              <div className="absolute top-14 left-3 bg-slate-900/90 border border-amber-500/50 rounded-lg px-3 py-1.5 text-[11px] text-amber-300 backdrop-blur-md max-w-xs flex items-center gap-1.5">
                 <HelpCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
                 <span>Fields taking longer to detect. You may tap Capture Now to proceed.</span>
               </div>
