@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
-import { AlertTriangle, CheckCircle2, ShieldAlert, Loader2, Camera, QrCode, Zap, Sparkles, FileText, Check, Trash2, Plus } from 'lucide-react';
-import GeolocationBadge from './GeolocationBadge';
+import React, { useState, useRef, useEffect } from 'react';
+import { AlertTriangle, CheckCircle2, Loader2, Camera, QrCode, Zap, Sparkles, FileText, Check, Trash2, Plus } from 'lucide-react';
 import BarcodeScanner from './BarcodeScanner';
 import SmartCaptureCamera from './SmartCaptureCamera';
 import { getApiBaseUrl } from '@/utils/api';
@@ -18,19 +17,13 @@ export default function OfficerInspectionForm({
   scannedFile = null,
   scannedBarcodeCode = ''
 }: OfficerInspectionFormProps) {
-  const [shopName, setShopName] = useState('');
-  const [location, setLocation] = useState('');
   const [category, setCategory] = useState('Packaged Food');
   const [netQuantity, setNetQuantity] = useState('');
   const [isInstitutional, setIsInstitutional] = useState(false);
   const [barcodeCode, setBarcodeCode] = useState(scannedBarcodeCode);
   const [showSmartCamera, setShowSmartCamera] = useState(false);
 
-  const [gpsData, setGpsData] = useState<{
-    latitude?: number;
-    longitude?: number;
-    accuracy?: number;
-  }>({});
+  const [gpsCoords, setGpsCoords] = useState<{ latitude?: number; longitude?: number; accuracy?: number }>({});
 
   const initialFiles: File[] = scannedFile
     ? Array.isArray(scannedFile)
@@ -47,23 +40,28 @@ export default function OfficerInspectionForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Background Auto-GPS Acquisition
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setGpsCoords({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy
+          });
+        },
+        (err) => console.log("Background GPS note:", err.message),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    }
+  }, []);
+
   const handleBarcodeDecoded = (product: any) => {
     if (product) {
       if (product.code) setBarcodeCode(product.code);
       if (product.category) setCategory(product.category);
       if (product.net_quantity) setNetQuantity(product.net_quantity);
-      if (product.product_name && !shopName) setShopName(`${product.brand} Store`);
-    }
-  };
-
-  const handleLocationCaptured = (data: { latitude: number; longitude: number; accuracy: number; formattedLocation: string }) => {
-    setGpsData({
-      latitude: data.latitude,
-      longitude: data.longitude,
-      accuracy: data.accuracy,
-    });
-    if (!location) {
-      setLocation(data.formattedLocation);
     }
   };
 
@@ -94,8 +92,8 @@ export default function OfficerInspectionForm({
   const executePipeline = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!shopName && bottleImages.length === 0) {
-      setError('Please provide establishment details or attach/snap product label photo.');
+    if (bottleImages.length === 0) {
+      setError('Please attach or snap product label photos for empirical OCR & Rule 6 evaluation.');
       return;
     }
 
@@ -104,11 +102,11 @@ export default function OfficerInspectionForm({
 
     try {
       const formData = new FormData();
-      formData.append('shop_name', shopName || 'Enforcement Field Inspection Site');
-      formData.append('location', location || 'Field Site Location');
-      if (gpsData.latitude) formData.append('latitude', gpsData.latitude.toString());
-      if (gpsData.longitude) formData.append('longitude', gpsData.longitude.toString());
-      if (gpsData.accuracy) formData.append('accuracy', gpsData.accuracy.toString());
+      formData.append('shop_name', 'Verified Field Inspection Site');
+      formData.append('location', gpsCoords.latitude ? `GPS (${gpsCoords.latitude.toFixed(4)}, ${gpsCoords.longitude?.toFixed(4)})` : 'Field Site Location');
+      if (gpsCoords.latitude) formData.append('latitude', gpsCoords.latitude.toString());
+      if (gpsCoords.longitude) formData.append('longitude', gpsCoords.longitude.toString());
+      if (gpsCoords.accuracy) formData.append('accuracy', gpsCoords.accuracy.toString());
 
       formData.append('category', category);
       formData.append('net_quantity', netQuantity);
@@ -178,10 +176,10 @@ export default function OfficerInspectionForm({
           <div>
             <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
               <Zap className="w-5 h-5 text-govt-navy" />
-              Package Inspection Verification &amp; Report Entry
+              Extracted Commodity Declarations &amp; Verification Form
             </h2>
             <p className="text-xs text-slate-500">
-              Review scanned product parameters and run Legal Metrology (2011) compliance verification
+              Submit label photos to evaluate Rule 6 mandatory declarations (MRP, Net Qty, Mfg Date, Manufacturer Address)
             </p>
           </div>
         </div>
@@ -193,37 +191,21 @@ export default function OfficerInspectionForm({
           </div>
         )}
 
-        {/* 1. High-Precision GPS Geolocation Badge */}
-        <GeolocationBadge onLocationCaptured={handleLocationCaptured} />
-
-        {/* 2. GTIN Barcode & QR Auto-Lookup */}
-        <BarcodeScanner onBarcodeDecoded={handleBarcodeDecoded} />
-
-        {/* 3. Scanned Images Preview Box */}
+        {/* 1. Scanned Package Label Photos Section */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
               <Camera className="w-4 h-4 text-govt-navy" />
-              Scanned Package Label Photos ({bottleImages.length})
+              Packaged Commodity Label Photos ({bottleImages.length})
             </span>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowSmartCamera(true)}
-                className="text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <Camera className="w-3.5 h-3.5" />
-                Live Smart Camera
-              </button>
-              <button
-                type="button"
-                onClick={() => nativeCameraInputRef.current?.click()}
-                className="text-xs text-govt-navy font-bold hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Upload / File Input
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowSmartCamera(true)}
+              className="text-xs bg-emerald-500 hover:bg-emerald-400 text-black px-3 py-1.5 rounded-lg font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-sm"
+            >
+              <Camera className="w-3.5 h-3.5 fill-black" />
+              Snap Photos
+            </button>
           </div>
 
           {bottlePreviews.length > 0 ? (
@@ -250,36 +232,17 @@ export default function OfficerInspectionForm({
               className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500 text-xs hover:border-govt-navy hover:bg-slate-100 transition-colors cursor-pointer space-y-2"
             >
               <Camera className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="font-semibold text-slate-700">Click to open Smart Camera or attach package label images</p>
-              <p className="text-[11px] text-slate-400">Supports multi-angle JPEG, PNG packaging labels &amp; bottle photos</p>
+              <p className="font-semibold text-slate-700">Click to snap packaged commodity label photos</p>
+              <p className="text-[11px] text-slate-400">Captures multi-angle photos for empirical OCR &amp; Rule 6 compliance check</p>
             </div>
           )}
         </div>
 
-        {/* 4. Inspection Fields Form Grid */}
+        {/* 2. GTIN Barcode & QR Auto-Lookup */}
+        <BarcodeScanner onBarcodeDecoded={handleBarcodeDecoded} />
+
+        {/* 3. Extracted Commodity Parameter Overrides */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-medium">
-          <div>
-            <label className="block text-slate-700 mb-1 font-semibold">Establishment / Retail Store Name</label>
-            <input
-              type="text"
-              value={shopName}
-              onChange={(e) => setShopName(e.target.value)}
-              placeholder="Enter store/establishment name..."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-govt-navy outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-slate-700 mb-1 font-semibold">Inspection Site Location</label>
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Capturing GPS location..."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-govt-navy outline-none bg-slate-50"
-            />
-          </div>
-
           <div>
             <label className="block text-slate-700 mb-1 font-semibold">Commodity Category</label>
             <select
@@ -297,12 +260,12 @@ export default function OfficerInspectionForm({
           </div>
 
           <div>
-            <label className="block text-slate-700 mb-1 font-semibold font-sans">Declared Net Quantity (Optional User Override)</label>
+            <label className="block text-slate-700 mb-1 font-semibold font-sans">Declared Net Quantity (Optional Manual Override)</label>
             <input
               type="text"
               value={netQuantity}
               onChange={(e) => setNetQuantity(e.target.value)}
-              placeholder="e.g. 500 g, 1.5 L (auto-extracted if blank)"
+              placeholder="Auto-extracted via OCR if left blank (e.g. 500 g, 1.5 L)"
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-govt-navy outline-none"
             />
           </div>
@@ -332,7 +295,7 @@ export default function OfficerInspectionForm({
           </div>
         </div>
 
-        {/* 5. Submit Action Button */}
+        {/* 4. Submit Action Button */}
         <button
           type="submit"
           disabled={loading}
@@ -341,7 +304,7 @@ export default function OfficerInspectionForm({
           {loading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
-              <span>Running Multi-Photo OCR &amp; Legal Metrology Rule Engine Pipeline...</span>
+              <span>Running OCR &amp; Legal Metrology Rule Engine Pipeline...</span>
             </>
           ) : (
             <>

@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Camera, Zap, ShieldCheck, AlertTriangle, FileText, CheckCircle2, ArrowRight, RefreshCw, Layers, Loader2 } from 'lucide-react';
+import { Camera, Zap, AlertTriangle, FileText, CheckCircle2, ArrowRight, RefreshCw, Layers, Loader2 } from 'lucide-react';
 import SmartCaptureCamera from './SmartCaptureCamera';
-import OfficerInspectionForm from './OfficerInspectionForm';
 import { getApiBaseUrl } from '@/utils/api';
 import { UserSession } from './LoginPage';
 
@@ -14,7 +13,6 @@ interface OfficerDashboardProps {
 
 export default function OfficerDashboard({ session, onSelectInspection }: OfficerDashboardProps) {
   const [showAutoScanner, setShowAutoScanner] = useState(false);
-  const [showForm, setShowForm] = useState(false);
   const [inspections, setInspections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -141,7 +139,7 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
           </div>
           <button
             onClick={() => setErrorMsg(null)}
-            className="text-slate-500 hover:text-slate-800 font-bold px-2"
+            className="text-slate-500 hover:text-slate-800 font-bold px-2 cursor-pointer"
           >
             ✕
           </button>
@@ -166,33 +164,18 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
             </p>
           </div>
 
-          {/* Direct Scan Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          {/* Single Unified Primary Scan Button */}
+          <div className="w-full md:w-auto">
             <button
               onClick={() => setShowAutoScanner(true)}
-              className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold px-6 py-3.5 rounded-xl shadow-xl flex items-center justify-center gap-2.5 cursor-pointer transition-all active:scale-95 text-xs sm:text-sm border border-emerald-300"
+              className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold px-8 py-4 rounded-xl shadow-2xl flex items-center justify-center gap-3 cursor-pointer transition-all active:scale-95 text-sm sm:text-base border border-emerald-300 min-h-[52px]"
             >
-              <Camera className="w-5 h-5 fill-black" />
-              <span>START SMART AUTO-SCAN</span>
-            </button>
-
-            <button
-              onClick={() => setShowForm(!showForm)}
-              className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-5 py-3.5 rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 text-xs"
-            >
-              <FileText className="w-4 h-4 text-emerald-400" />
-              <span>{showForm ? 'Hide Form' : 'Inspection Form'}</span>
+              <Camera className="w-6 h-6 fill-black" />
+              <span>SCAN PACKAGED COMMODITY</span>
             </button>
           </div>
         </div>
       </div>
-
-      {/* Manual / Full Form Section */}
-      {showForm && (
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <OfficerInspectionForm onInspectionComplete={onSelectInspection} />
-        </div>
-      )}
 
       {/* KPI Stats Widgets */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

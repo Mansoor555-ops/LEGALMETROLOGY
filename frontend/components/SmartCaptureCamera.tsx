@@ -456,17 +456,17 @@ export default function SmartCaptureCamera({
       <div className="flex flex-col sm:flex-row justify-between items-center gap-3 py-2 z-10">
         <button
           onClick={() => nativeInputRef.current?.click()}
-          className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5 font-semibold cursor-pointer"
+          className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 font-medium cursor-pointer"
         >
           <Camera className="w-4 h-4 text-emerald-400" />
-          Native Phone Camera / Gallery
+          Choose File / Phone Camera
         </button>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
           {cameraSupported && (
             <button
               onClick={triggerPhotoCapture}
-              className={`flex-1 sm:flex-initial font-bold text-xs sm:text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 border ${
+              className={`flex-1 sm:flex-initial font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 border min-h-[48px] ${
                 qualityStatus === 'good'
                   ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border-emerald-500/50'
                   : 'bg-amber-950/80 hover:bg-amber-900 text-amber-300 border-amber-500/50'
@@ -474,27 +474,27 @@ export default function SmartCaptureCamera({
             >
               <Plus className="w-4 h-4" />
               <span>
-                {qualityStatus === 'good'
-                  ? `Snap Photo (#${snappedFiles.length + 1})`
-                  : `Capture Frame (Warning)`}
+                {snappedFiles.length === 0
+                  ? 'SNAP LABEL PHOTO'
+                  : `SNAP ANOTHER PHOTO (#${snappedFiles.length + 1})`}
               </span>
             </button>
           )}
 
-          <button
-            onClick={handleFinishAndEvaluate}
-            disabled={isProcessing || snappedFiles.length === 0}
-            className="flex-1 sm:flex-initial bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs sm:text-sm px-6 py-3 rounded-xl shadow-2xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 border border-emerald-300 disabled:opacity-40"
-          >
-            <CheckCircle2 className="w-5 h-5 fill-black" />
-            <span>
-              {isProcessing
-                ? 'Evaluating Pipeline...'
-                : snappedFiles.length === 0
-                ? 'Snap Photo First'
-                : `FINISH & EVALUATE REPORT (${snappedFiles.length})`}
-            </span>
-          </button>
+          {snappedFiles.length > 0 && (
+            <button
+              onClick={handleFinishAndEvaluate}
+              disabled={isProcessing}
+              className="flex-1 sm:flex-initial bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs sm:text-sm px-6 py-3.5 rounded-xl shadow-2xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 border border-emerald-300 disabled:opacity-40 min-h-[48px]"
+            >
+              <CheckCircle2 className="w-5 h-5 fill-black" />
+              <span>
+                {isProcessing
+                  ? 'Evaluating Pipeline...'
+                  : `EVALUATE REPORT (${snappedFiles.length})`}
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </div>
