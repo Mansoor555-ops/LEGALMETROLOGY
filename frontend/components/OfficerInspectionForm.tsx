@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useState, useRef } from 'react';
-import { AlertTriangle, CheckCircle2, ShieldAlert, Loader2, Camera, QrCode, Zap, Sparkles, FileText, Check } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ShieldAlert, Loader2, Camera, QrCode, Zap, Sparkles, FileText, Check, Trash2, Plus } from 'lucide-react';
 import GeolocationBadge from './GeolocationBadge';
 import BarcodeScanner from './BarcodeScanner';
 import { getApiBaseUrl } from '@/utils/api';
 
 interface OfficerInspectionFormProps {
   onInspectionComplete: (result: any) => void;
-  scannedFile?: File | null;
+  scannedFile?: File | File[] | null;
   scannedBarcodeCode?: string;
 }
 
@@ -30,9 +30,15 @@ export default function OfficerInspectionForm({
     accuracy?: number;
   }>({});
 
-  const [bottleImage, setBottleImage] = useState<File | null>(scannedFile);
-  const [bottlePreview, setBottlePreview] = useState<string | null>(
-    scannedFile ? URL.createObjectURL(scannedFile) : null
+  const initialFiles: File[] = scannedFile
+    ? Array.isArray(scannedFile)
+      ? scannedFile
+      : [scannedFile]
+    : [];
+
+  const [bottleImages, setBottleImages] = useState<File[]>(initialFiles);
+  const [bottlePreviews, setBottlePreviews] = useState<string[]>(
+    initialFiles.map(f => URL.createObjectURL(f))
   );
 
   const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -60,17 +66,24 @@ export default function OfficerInspectionForm({
   };
 
   const handleNativeCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setBottleImage(file);
-      setBottlePreview(URL.createObjectURL(file));
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files);
+      const newPreviews = newFiles.map(f => URL.createObjectURL(f));
+
+      setBottleImages(prev => [...prev, ...newFiles]);
+      setBottlePreviews(prev => [...prev, ...newPreviews]);
     }
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setBottleImages(prev => prev.filter((_, i) => i !== index));
+    setBottlePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const executePipeline = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!shopName && !bottleImage) {
+    if (!shopName && bottleImages.length === 0) {
       setError('Please provide establishment details or attach/snap product label photo.');
       return;
     }
@@ -91,9 +104,19 @@ export default function OfficerInspectionForm({
       formData.append('is_institutional', isInstitutional ? 'true' : 'false');
       if (barcodeCode) formData.append('barcode_code', barcodeCode);
 
-      if (bottleImage) {
-        formData.append('front_image', bottleImage);
-        formData.append('back_image', bottleImage);
+      // Append all attached images
+      bottleImages.forEach((img, idx) => {
+        formData.append('images', img);
+        formData.append(`photo_${idx + 1}`, img);
+      });
+
+      if (bottleImages.length > 0) {
+        formData.append('front_image', bottleImages[0]);
+        if (bottleImages.length > 1) {
+          formData.append('back_image', bottleImages[1]);
+        } else {
+          formData.append('back_image', bottleImages[0]);
+        }
       }
 
       const apiBase = getApiBaseUrl();
@@ -125,6 +148,7 @@ export default function OfficerInspectionForm({
         ref={nativeCameraInputRef}
         type="file"
         accept="image/*"
+        multiple
         capture="environment"
         className="hidden"
         onChange={handleNativeCameraChange}
@@ -156,32 +180,40 @@ export default function OfficerInspectionForm({
         {/* 2. GTIN Barcode & QR Auto-Lookup */}
         <BarcodeScanner onBarcodeDecoded={handleBarcodeDecoded} />
 
-        {/* 3. Scanned Image Preview Box */}
+        {/* 3. Scanned Images Preview Box */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
               <Camera className="w-4 h-4 text-govt-navy" />
-              Scanned Package Label Photo
+              Scanned Package Label Photos ({bottleImages.length})
             </span>
             <button
               type="button"
               onClick={() => nativeCameraInputRef.current?.click()}
               className="text-xs text-govt-navy font-bold hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <Camera className="w-3.5 h-3.5" />
-              {bottleImage ? 'Change Photo' : 'Snap Photo'}
+              <Plus className="w-3.5 h-3.5" />
+              Add Label Photos
             </button>
           </div>
 
-          {bottlePreview ? (
-            <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-              <img src={bottlePreview} alt="Scanned label preview" className="w-20 h-20 object-cover rounded-lg border border-slate-300" />
-              <div className="text-xs space-y-1">
-                <span className="font-bold text-slate-900 block">{bottleImage?.name || 'scanned_label.jpg'}</span>
-                <span className="text-emerald-700 font-semibold text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
-                  ✓ Photo attached for empirical OCR extraction
-                </span>
-              </div>
+          {bottlePreviews.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+              {bottlePreviews.map((previewUrl, idx) => (
+                <div key={idx} className="relative group border border-slate-200 rounded-lg p-1">
+                  <img src={previewUrl} alt={`Label photo ${idx+1}`} className="w-full h-24 object-cover rounded-md" />
+                  <span className="absolute bottom-1.5 left-1.5 bg-black/75 text-white text-[9px] font-mono px-1.5 py-0.5 rounded font-bold">
+                    #{idx+1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePhoto(idx)}
+                    className="absolute top-1.5 right-1.5 bg-red-600 hover:bg-red-500 text-white rounded-full p-1 shadow cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
             </div>
           ) : (
             <div
@@ -189,8 +221,8 @@ export default function OfficerInspectionForm({
               className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500 text-xs hover:border-govt-navy hover:bg-slate-100 transition-colors cursor-pointer space-y-2"
             >
               <Camera className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="font-semibold text-slate-700">Click to attach or snap package label image</p>
-              <p className="text-[11px] text-slate-400">Supports JPEG, PNG packaging labels &amp; bottle photos</p>
+              <p className="font-semibold text-slate-700">Click to attach or snap package label images</p>
+              <p className="text-[11px] text-slate-400">Supports multi-angle JPEG, PNG packaging labels &amp; bottle photos</p>
             </div>
           )}
         </div>
@@ -236,7 +268,7 @@ export default function OfficerInspectionForm({
           </div>
 
           <div>
-            <label className="block text-slate-700 mb-1 font-semibold">Declared Net Quantity (Optional User Override)</label>
+            <label className="block text-slate-700 mb-1 font-semibold font-sans">Declared Net Quantity (Optional User Override)</label>
             <input
               type="text"
               value={netQuantity}
@@ -247,7 +279,7 @@ export default function OfficerInspectionForm({
           </div>
 
           <div>
-            <label className="block text-slate-700 mb-1 font-semibold">GTIN / EAN Barcode Code</label>
+            <label className="block text-slate-700 mb-1 font-semibold font-sans">GTIN / EAN Barcode Code</label>
             <input
               type="text"
               value={barcodeCode}
@@ -265,8 +297,8 @@ export default function OfficerInspectionForm({
               onChange={(e) => setIsInstitutional(e.target.checked)}
               className="w-4 h-4 text-govt-navy rounded focus:ring-govt-navy cursor-pointer"
             />
-            <label htmlFor="isInstitutional" className="text-xs text-slate-700 cursor-pointer font-semibold">
-              Rule 3 Exemption: Declared for Institutional / Industrial Use ($> 25\text{kg/L}$)
+            <label htmlFor="isInstitutional" className="text-xs text-slate-700 cursor-pointer font-semibold font-sans">
+              Rule 3 Exemption: Declared for Institutional / Industrial Use (&gt; 25 kg/L)
             </label>
           </div>
         </div>
@@ -280,7 +312,7 @@ export default function OfficerInspectionForm({
           {loading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
-              <span>Running OCR &amp; Legal Metrology Rule Engine Pipeline...</span>
+              <span>Running Multi-Photo OCR &amp; Legal Metrology Rule Engine Pipeline...</span>
             </>
           ) : (
             <>

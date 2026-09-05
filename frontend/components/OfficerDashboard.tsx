@@ -37,8 +37,10 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
     fetchRecentInspections();
   }, []);
 
-  const handleScanCompleteFromScanner = async (bFile: File, bcFile: File | null, bCode: string) => {
+  const handleScanCompleteFromScanner = async (files: File[]) => {
     setShowAutoScanner(false);
+
+    if (!files || files.length === 0) return;
 
     // Auto submit to inspection API
     const formData = new FormData();
@@ -47,11 +49,20 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
     formData.append('category', 'Packaged Food');
     formData.append('net_quantity', '');
     formData.append('is_institutional', 'false');
-    if (bCode) formData.append('barcode_code', bCode);
 
-    formData.append('front_image', bFile);
-    formData.append('back_image', bFile);
-    if (bcFile) formData.append('barcode_image', bcFile);
+    files.forEach((f, idx) => {
+      formData.append('images', f);
+      formData.append(`photo_${idx + 1}`, f);
+    });
+
+    if (files.length > 0) {
+      formData.append('front_image', files[0]);
+      if (files.length > 1) {
+        formData.append('back_image', files[1]);
+      } else {
+        formData.append('back_image', files[0]);
+      }
+    }
 
     try {
       const apiBase = getApiBaseUrl();

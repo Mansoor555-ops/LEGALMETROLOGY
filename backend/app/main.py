@@ -187,29 +187,37 @@ class RectificationRequest(BaseModel):
 
 @app.post("/api/inspect")
 async def create_inspection(
-    shop_name: str = Form(...),
-    location: str = Form(...),
+    shop_name: str = Form(""),
+    location: str = Form(""),
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
     accuracy: Optional[float] = Form(None),
-    category: str = Form(...),
+    category: str = Form("Packaged Food"),
     net_quantity: Optional[str] = Form(""),
     is_institutional: Optional[bool] = Form(False),
     barcode_code: Optional[str] = Form(None),
     front_image: Optional[UploadFile] = File(None),
     back_image: Optional[UploadFile] = File(None),
     neck_image: Optional[UploadFile] = File(None),
-    barcode_image: Optional[UploadFile] = File(None)
+    barcode_image: Optional[UploadFile] = File(None),
+    images: Optional[List[UploadFile]] = File(None)
 ):
     # 1. Exemption Pre-check
     is_exempt_flag, exemption_reason = evaluate_exemption(net_quantity or "", is_institutional or False)
 
-    uploaded_files = {
-        "front": front_image,
-        "back": back_image,
-        "neck": neck_image
-    }
-    
+    # Collect all uploaded photo files
+    all_files = []
+    if images:
+        all_files.extend([f for f in images if f and f.filename])
+    if front_image and front_image.filename and front_image not in all_files:
+        all_files.append(front_image)
+    if back_image and back_image.filename and back_image not in all_files:
+        all_files.append(back_image)
+    if neck_image and neck_image.filename and neck_image not in all_files:
+        all_files.append(neck_image)
+    if barcode_image and barcode_image.filename and barcode_image not in all_files:
+        all_files.append(barcode_image)
+
     saved_image_paths = []
     panel_results_map = {}
     quality_warnings = []
@@ -218,50 +226,50 @@ async def create_inspection(
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     insp_id = f"INSP-{datetime.now().strftime('%Y')}-{timestamp_str[-6:]}"
 
-    if not is_exempt_flag:
-        for panel_name, file_obj in uploaded_files.items():
-            if file_obj is not None and file_obj.filename:
-                file_bytes = await file_obj.read()
-                
-                # Quality Check
-                q_res = check_image_quality(file_bytes)
-                if not q_res["passed"]:
-                    quality_warnings.append(f"{panel_name.capitalize()} panel warning: {q_res['message']}")
+    if not is_exempt_flag and all_files:
+        for idx, file_obj in enumerate(all_files):
+            panel_name = f"photo_{idx+1}"
+            file_bytes = await file_obj.read()
+            
+            # Quality Check
+            q_res = check_image_quality(file_bytes)
+            if not q_res["passed"]:
+                quality_warnings.append(f"Photo #{idx+1} warning: {q_res['message']}")
 
-                # Save raw image
-                ext = file_obj.filename.split(".")[-1] if "." in file_obj.filename else "jpg"
-                filename = f"{insp_id}_{panel_name}.{ext}"
-                filepath = os.path.join(UPLOADS_DIR, filename)
-                with open(filepath, "wb") as f:
-                    f.write(file_bytes)
-                saved_image_paths.append(f"/uploads/{filename}")
+            # Save raw image
+            ext = file_obj.filename.split(".")[-1] if "." in file_obj.filename else "jpg"
+            filename = f"{insp_id}_photo_{idx+1}.{ext}"
+            filepath = os.path.join(UPLOADS_DIR, filename)
+            with open(filepath, "wb") as f:
+                f.write(file_bytes)
+            saved_image_paths.append(f"/uploads/{filename}")
 
-                # YOLOv8 region detection & crop
-                cropped_bytes, yolo_meta = crop_label_region(file_bytes)
+            # YOLOv8 region detection & crop
+            cropped_bytes, yolo_meta = crop_label_region(file_bytes)
 
-                # Detection-First Stage 2 & 3: Isolated per-region OCR
-                from .ocr_engine import extract_structured_field_regions
-                ocr_region_map = extract_structured_field_regions(file_bytes)
+            # Detection-First Stage 2 & 3: Isolated per-region OCR
+            from .ocr_engine import extract_structured_field_regions
+            ocr_region_map = extract_structured_field_regions(file_bytes)
 
-                # Combine regional OCR results for field extraction
-                combined_lines = []
-                combined_full_text = []
-                for reg_name, ocr_res in ocr_region_map.items():
-                    combined_lines.extend(ocr_res.get("lines", []))
-                    if ocr_res.get("full_text"):
-                        combined_full_text.append(ocr_res["full_text"])
+            # Combine regional OCR results for field extraction
+            combined_lines = []
+            combined_full_text = []
+            for reg_name, ocr_res in ocr_region_map.items():
+                combined_lines.extend(ocr_res.get("lines", []))
+                if ocr_res.get("full_text"):
+                    combined_full_text.append(ocr_res["full_text"])
 
-                ocr_res = {
-                    "full_text": " ".join(combined_full_text),
-                    "lines": combined_lines,
-                    "avg_confidence": 0.90 if combined_lines else 0.0
-                }
+            ocr_res = {
+                "full_text": " ".join(combined_full_text),
+                "lines": combined_lines,
+                "avg_confidence": 0.90 if combined_lines else 0.0
+            }
 
-                # Rule extraction
-                panel_fields = evaluate_rules_for_panel(ocr_res, category, panel_name)
-                panel_results_map[panel_name] = panel_fields
+            # Rule extraction
+            panel_fields = evaluate_rules_for_panel(ocr_res, category, panel_name)
+            panel_results_map[panel_name] = panel_fields
 
-        # Merge fields across uploaded panels
+        # Merge fields across all uploaded photos
         merged_fields, overall_status = merge_multi_panel_results(panel_results_map)
 
         # Extract detected company name for auto-fill
@@ -271,8 +279,8 @@ async def create_inspection(
         final_shop_name = shop_name.strip() if (shop_name and shop_name.strip()) else (f"{detected_company}" if detected_company else "Enforcement Field Site")
     else:
         merged_fields = []
-        overall_status = "EXEMPT"
-        final_shop_name = shop_name
+        overall_status = "EXEMPT" if is_exempt_flag else "FAIL"
+        final_shop_name = shop_name.strip() or "Enforcement Field Site"
 
     inspection_record = {
         "id": insp_id,
