@@ -12,10 +12,10 @@ interface OfficerInspectionFormProps {
 }
 
 export default function OfficerInspectionForm({ onInspectionComplete }: OfficerInspectionFormProps) {
-  const [shopName, setShopName] = useState('Metro Mart Supermarket');
+  const [shopName, setShopName] = useState('');
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState('Packaged Food');
-  const [netQuantity, setNetQuantity] = useState('500 g');
+  const [netQuantity, setNetQuantity] = useState('');
   const [isInstitutional, setIsInstitutional] = useState(false);
   const [barcodeCode, setBarcodeCode] = useState('');
 

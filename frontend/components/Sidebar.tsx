@@ -22,6 +22,20 @@ export default function Sidebar({ activeTab, setActiveTab, role }: SidebarProps)
             <nav className="space-y-1">
               {(role === 'Officer' || role === 'Admin') && (
                 <button
+                  onClick={() => setActiveTab('officer_dashboard')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-xs font-semibold text-left transition-colors ${
+                    activeTab === 'officer_dashboard'
+                      ? 'bg-govt-navy text-white shadow-sm'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Officer Dashboard &amp; Scan
+                </button>
+              )}
+
+              {(role === 'Officer' || role === 'Admin') && (
+                <button
                   onClick={() => setActiveTab('new_inspection')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-xs font-semibold text-left transition-colors ${
                     activeTab === 'new_inspection'
@@ -30,7 +44,7 @@ export default function Sidebar({ activeTab, setActiveTab, role }: SidebarProps)
                   }`}
                 >
                   <PlusCircle className="w-4 h-4" />
-                  New Inspection
+                  New Inspection Form
                 </button>
               )}
 
@@ -115,13 +129,13 @@ export default function Sidebar({ activeTab, setActiveTab, role }: SidebarProps)
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 text-white z-40 px-2 py-2 flex justify-around items-center shadow-lg">
         {(role === 'Officer' || role === 'Admin') && (
           <button
-            onClick={() => setActiveTab('new_inspection')}
+            onClick={() => setActiveTab('officer_dashboard')}
             className={`flex flex-col items-center gap-1 text-[10px] font-semibold py-1 px-3 rounded ${
-              activeTab === 'new_inspection' ? 'text-emerald-400 bg-slate-800' : 'text-slate-400'
+              activeTab === 'officer_dashboard' ? 'text-emerald-400 bg-slate-800' : 'text-slate-400'
             }`}
           >
-            <PlusCircle className="w-5 h-5" />
-            Inspect
+            <PlusCircle className="w-5 h-5 text-emerald-400" />
+            Scan &amp; Inspect
           </button>
         )}
 

@@ -83,8 +83,8 @@ export default function BarcodeScanner({ onBarcodeDecoded }: BarcodeScannerProps
     }
 
     setLoading(false);
-    setStatusMsg(`GTIN ${code} bound to inspection; manual entry enabled.`);
-    onBarcodeDecoded({ code, category: "Packaged Food", net_quantity: "500 g" });
+    setStatusMsg(`GTIN ${code} bound to inspection; empirical camera OCR will extract net quantity & commodity.`);
+    onBarcodeDecoded({ code });
   };
 
   const sampleBarcodes = [

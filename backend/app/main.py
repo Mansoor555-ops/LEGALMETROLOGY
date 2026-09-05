@@ -268,7 +268,7 @@ async def create_inspection(
         mfg_field = next((f for f in merged_fields if f["field_key"] == "manufacturer_name_address"), None)
         detected_company = mfg_field["extracted_text"] if (mfg_field and mfg_field.get("extracted_text") and "Not found" not in mfg_field["extracted_text"]) else ""
 
-        final_shop_name = shop_name if (shopName := shop_name.strip()) and shopName != "Metro Mart Supermarket" else (f"{detected_company}" if detected_company else "Verified Enforcement Site")
+        final_shop_name = shop_name.strip() if (shop_name and shop_name.strip()) else (f"{detected_company}" if detected_company else "Enforcement Field Site")
     else:
         merged_fields = []
         overall_status = "EXEMPT"
