@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+backend/venv/
+
+# Next.js
+frontend/.next/
+frontend/out/
+
+# Python & Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Datasets & Trained Runs
+backend/dataset/
+backend/runs/
+
+# SQLite & Logs
+*.db
+*.log
+
+# Misc
+.DS_Store
+*.swp
