@@ -1,43 +1,41 @@
 "use client";
 
 import React, { useState, useRef } from 'react';
-import { Upload, AlertTriangle, CheckCircle2, ShieldAlert, Loader2, Camera, QrCode, Zap, Sparkles, ArrowRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ShieldAlert, Loader2, Camera, QrCode, Zap, Sparkles, FileText, Check } from 'lucide-react';
 import GeolocationBadge from './GeolocationBadge';
 import BarcodeScanner from './BarcodeScanner';
-import UnifiedAutoScanner from './UnifiedAutoScanner';
 import { getApiBaseUrl } from '@/utils/api';
 
 interface OfficerInspectionFormProps {
   onInspectionComplete: (result: any) => void;
+  scannedFile?: File | null;
+  scannedBarcodeCode?: string;
 }
 
-export default function OfficerInspectionForm({ onInspectionComplete }: OfficerInspectionFormProps) {
+export default function OfficerInspectionForm({
+  onInspectionComplete,
+  scannedFile = null,
+  scannedBarcodeCode = ''
+}: OfficerInspectionFormProps) {
   const [shopName, setShopName] = useState('');
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState('Packaged Food');
   const [netQuantity, setNetQuantity] = useState('');
   const [isInstitutional, setIsInstitutional] = useState(false);
-  const [barcodeCode, setBarcodeCode] = useState('');
+  const [barcodeCode, setBarcodeCode] = useState(scannedBarcodeCode);
 
-  // GPS coordinates state
   const [gpsData, setGpsData] = useState<{
     latitude?: number;
     longitude?: number;
     accuracy?: number;
   }>({});
 
-  const [bottleImage, setBottleImage] = useState<File | null>(null);
-  const [barcodeImage, setBarcodeImage] = useState<File | null>(null);
+  const [bottleImage, setBottleImage] = useState<File | null>(scannedFile);
+  const [bottlePreview, setBottlePreview] = useState<string | null>(
+    scannedFile ? URL.createObjectURL(scannedFile) : null
+  );
 
-  const [bottlePreview, setBottlePreview] = useState<string | null>(null);
-  const [barcodePreview, setBarcodePreview] = useState<string | null>(null);
-
-  // Native camera fallback ref
   const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Scanner modal state
-  const [showAutoScanner, setShowAutoScanner] = useState(false);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +44,7 @@ export default function OfficerInspectionForm({ onInspectionComplete }: OfficerI
       if (product.code) setBarcodeCode(product.code);
       if (product.category) setCategory(product.category);
       if (product.net_quantity) setNetQuantity(product.net_quantity);
-      if (product.product_name && !shopName) setShopName(`${product.brand} Retail Store`);
+      if (product.product_name && !shopName) setShopName(`${product.brand} Store`);
     }
   };
 
@@ -61,38 +59,19 @@ export default function OfficerInspectionForm({ onInspectionComplete }: OfficerI
     }
   };
 
-  const handleScanCompleteFromScanner = (bFile: File, bcFile: File | null, bCode: string) => {
-    setBottleImage(bFile);
-    setBottlePreview(URL.createObjectURL(bFile));
-    if (bcFile) {
-      setBarcodeImage(bcFile);
-      setBarcodePreview(URL.createObjectURL(bcFile));
-    }
-    if (bCode) setBarcodeCode(bCode);
-
-    // Auto-execute pipeline with captured images
-    executePipeline(bFile, bcFile, bCode);
-  };
-
   const handleNativeCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setBottleImage(file);
       setBottlePreview(URL.createObjectURL(file));
-      executePipeline(file, barcodeImage, barcodeCode);
     }
   };
 
-  const executePipeline = async (bFile: File | null, bcFile: File | null, bCode: string) => {
-    const mainFile = bFile || bottleImage;
+  const executePipeline = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-    if (!shopName || !location) {
-      setError('Please verify Establishment Name and Geolocation.');
-      return;
-    }
-
-    if (!isInstitutional && !mainFile) {
-      setError('Please snap or auto-scan the product package label photo.');
+    if (!shopName && !bottleImage) {
+      setError('Please provide establishment details or attach/snap product label photo.');
       return;
     }
 
@@ -101,8 +80,8 @@ export default function OfficerInspectionForm({ onInspectionComplete }: OfficerI
 
     try {
       const formData = new FormData();
-      formData.append('shop_name', shopName);
-      formData.append('location', location);
+      formData.append('shop_name', shopName || 'Enforcement Field Inspection Site');
+      formData.append('location', location || 'Field Site Location');
       if (gpsData.latitude) formData.append('latitude', gpsData.latitude.toString());
       if (gpsData.longitude) formData.append('longitude', gpsData.longitude.toString());
       if (gpsData.accuracy) formData.append('accuracy', gpsData.accuracy.toString());
@@ -110,14 +89,11 @@ export default function OfficerInspectionForm({ onInspectionComplete }: OfficerI
       formData.append('category', category);
       formData.append('net_quantity', netQuantity);
       formData.append('is_institutional', isInstitutional ? 'true' : 'false');
-      if (bCode || barcodeCode) formData.append('barcode_code', bCode || barcodeCode);
+      if (barcodeCode) formData.append('barcode_code', barcodeCode);
 
-      if (mainFile) {
-        formData.append('front_image', mainFile);
-        formData.append('back_image', mainFile);
-      }
-      if (bcFile || barcodeImage) {
-        formData.append('barcode_image', bcFile || barcodeImage);
+      if (bottleImage) {
+        formData.append('front_image', bottleImage);
+        formData.append('back_image', bottleImage);
       }
 
       const apiBase = getApiBaseUrl();
@@ -143,14 +119,8 @@ export default function OfficerInspectionForm({ onInspectionComplete }: OfficerI
     }
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    executePipeline(bottleImage, barcodeImage, barcodeCode);
-  };
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Native Camera Input */}
       <input
         ref={nativeCameraInputRef}
         type="file"
@@ -160,24 +130,15 @@ export default function OfficerInspectionForm({ onInspectionComplete }: OfficerI
         onChange={handleNativeCameraChange}
       />
 
-      {/* Sequential 3-Pass Smart Auto-Scanner Modal */}
-      {showAutoScanner && (
-        <UnifiedAutoScanner
-          category={category}
-          onScanComplete={handleScanCompleteFromScanner}
-          onClose={() => setShowAutoScanner(false)}
-        />
-      )}
-
-      <div className="bg-white border border-govt-border rounded-xl shadow-sm p-4 sm:p-6 space-y-6">
+      <form onSubmit={executePipeline} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-6">
         <div className="border-b border-slate-200 pb-3 flex justify-between items-center">
           <div>
             <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
               <Zap className="w-5 h-5 text-govt-navy" />
-              Guided Sequential Bottle &amp; Package Inspection
+              Package Inspection Verification &amp; Report Entry
             </h2>
             <p className="text-xs text-slate-500">
-              Pass 1: Auto-Scan Bottle Label $\rightarrow$ Pass 2: Auto-Scan Bottle Barcode.
+              Review scanned product parameters and run Legal Metrology (2011) compliance verification
             </p>
           </div>
         </div>
@@ -195,116 +156,140 @@ export default function OfficerInspectionForm({ onInspectionComplete }: OfficerI
         {/* 2. GTIN Barcode & QR Auto-Lookup */}
         <BarcodeScanner onBarcodeDecoded={handleBarcodeDecoded} />
 
-        {/* 3. Sequential Guided Auto-Scan Action Hero Section */}
-        <div className="bg-slate-900 text-white rounded-xl p-6 text-center space-y-4 shadow-lg border border-slate-800">
-          <div className="w-14 h-14 bg-govt-navy rounded-full flex items-center justify-center mx-auto border-2 border-emerald-400 shadow-inner">
-            <Sparkles className="w-7 h-7 text-emerald-400 animate-pulse" />
-          </div>
-
-          <div>
-            <h3 className="text-base font-bold text-white">Guided 2-Pass Bottle Scanner</h3>
-            <p className="text-xs text-slate-300 max-w-md mx-auto mt-1">
-              Tap below to start: camera auto-captures the full bottle label first, then automatically prompts for the bottle barcode on the back/bottom.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setShowAutoScanner(true)}
-              className="bg-emerald-500 hover:bg-emerald-600 text-black text-xs font-extrabold px-6 py-3.5 rounded-lg shadow-xl flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-98 min-h-[48px]"
-            >
-              <Zap className="w-4 h-4 fill-black" />
-              START GUIDED BOTTLE SCANNER
-            </button>
-
+        {/* 3. Scanned Image Preview Box */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
+              <Camera className="w-4 h-4 text-govt-navy" />
+              Scanned Package Label Photo
+            </span>
             <button
               type="button"
               onClick={() => nativeCameraInputRef.current?.click()}
-              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-5 py-3.5 rounded-lg border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-colors min-h-[48px]"
+              className="text-xs text-govt-navy font-bold hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <Camera className="w-4 h-4 text-emerald-400" />
-              Snap Photo with Camera
+              <Camera className="w-3.5 h-3.5" />
+              {bottleImage ? 'Change Photo' : 'Snap Photo'}
             </button>
           </div>
 
-          {(bottlePreview || barcodePreview) && (
-            <div className="pt-2 flex flex-wrap justify-center gap-4">
-              {bottlePreview && (
-                <div className="bg-slate-800 p-2.5 rounded-lg border border-slate-700 flex items-center gap-3">
-                  <img src={bottlePreview} alt="Bottle Label" className="h-14 w-14 object-cover rounded" />
-                  <div className="text-left text-xs">
-                    <span className="text-emerald-400 font-bold block">Pass 1: Bottle Label</span>
-                    <span className="text-slate-400 text-[10px]">Sharpness Locked</span>
-                  </div>
-                </div>
-              )}
-              {barcodePreview && (
-                <div className="bg-slate-800 p-2.5 rounded-lg border border-slate-700 flex items-center gap-3">
-                  <img src={barcodePreview} alt="Barcode" className="h-14 w-14 object-cover rounded" />
-                  <div className="text-left text-xs">
-                    <span className="text-emerald-400 font-bold block">Pass 2: Barcode</span>
-                    <span className="text-slate-400 text-[10px]">GTIN Captured</span>
-                  </div>
-                </div>
-              )}
+          {bottlePreview ? (
+            <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+              <img src={bottlePreview} alt="Scanned label preview" className="w-20 h-20 object-cover rounded-lg border border-slate-300" />
+              <div className="text-xs space-y-1">
+                <span className="font-bold text-slate-900 block">{bottleImage?.name || 'scanned_label.jpg'}</span>
+                <span className="text-emerald-700 font-semibold text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
+                  ✓ Photo attached for empirical OCR extraction
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div
+              onClick={() => nativeCameraInputRef.current?.click()}
+              className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500 text-xs hover:border-govt-navy hover:bg-slate-100 transition-colors cursor-pointer space-y-2"
+            >
+              <Camera className="w-8 h-8 text-slate-400 mx-auto" />
+              <p className="font-semibold text-slate-700">Click to attach or snap package label image</p>
+              <p className="text-[11px] text-slate-400">Supports JPEG, PNG packaging labels &amp; bottle photos</p>
             </div>
           )}
         </div>
 
-        {/* Optional Overrides & Evaluation */}
-        <form onSubmit={handleFormSubmit} className="space-y-4 pt-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Establishment / Shop Name</label>
-              <input
-                type="text"
-                required
-                value={shopName}
-                onChange={(e) => setShopName(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-slate-300 rounded focus:ring-1 focus:ring-govt-navy outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Product Category</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-slate-300 rounded focus:ring-1 focus:ring-govt-navy outline-none bg-white cursor-pointer"
-              >
-                <option value="Packaged Food">Packaged Food (Atta, Snacks, Grains)</option>
-                <option value="Beverages">Beverages &amp; Juices (Bottles &amp; Cans)</option>
-                <option value="Cosmetics & Personal Care">Cosmetics &amp; Personal Care</option>
-                <option value="Household Goods">Household Goods &amp; Detergents</option>
-                <option value="Electronics & Appliances">Electronics &amp; Appliances</option>
-                <option value="Industrial Raw Materials">Industrial Raw Materials</option>
-                <option value="Imported Commodity">Imported Commodity</option>
-              </select>
-            </div>
+        {/* 4. Inspection Fields Form Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-medium">
+          <div>
+            <label className="block text-slate-700 mb-1 font-semibold">Establishment / Retail Store Name</label>
+            <input
+              type="text"
+              value={shopName}
+              onChange={(e) => setShopName(e.target.value)}
+              placeholder="Enter store/establishment name..."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-govt-navy outline-none"
+            />
           </div>
 
-          <div className="border-t border-slate-200 pt-4 flex justify-end">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full sm:w-auto bg-govt-navy hover:bg-slate-900 text-white text-xs font-bold px-6 py-3 rounded shadow flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 min-h-[44px]"
+          <div>
+            <label className="block text-slate-700 mb-1 font-semibold">Inspection Site Location</label>
+            <input
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Capturing GPS location..."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-govt-navy outline-none bg-slate-50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-slate-700 mb-1 font-semibold">Commodity Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-govt-navy outline-none bg-white"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  Processing Inspection Pipeline...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Evaluate Compliance Results
-                </>
-              )}
-            </button>
+              <option value="Packaged Food">Packaged Food</option>
+              <option value="Beverages">Beverages</option>
+              <option value="Cosmetics & Personal Care">Cosmetics &amp; Personal Care</option>
+              <option value="Household Goods">Household Goods</option>
+              <option value="Industrial Raw Materials">Industrial Raw Materials</option>
+              <option value="Imported Commodity">Imported Commodity</option>
+            </select>
           </div>
-        </form>
-      </div>
+
+          <div>
+            <label className="block text-slate-700 mb-1 font-semibold">Declared Net Quantity (Optional User Override)</label>
+            <input
+              type="text"
+              value={netQuantity}
+              onChange={(e) => setNetQuantity(e.target.value)}
+              placeholder="e.g. 500 g, 1.5 L (auto-extracted if blank)"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-govt-navy outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-slate-700 mb-1 font-semibold">GTIN / EAN Barcode Code</label>
+            <input
+              type="text"
+              value={barcodeCode}
+              onChange={(e) => setBarcodeCode(e.target.value)}
+              placeholder="Enter or scan GTIN code..."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-govt-navy outline-none font-mono"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-4">
+            <input
+              type="checkbox"
+              id="isInstitutional"
+              checked={isInstitutional}
+              onChange={(e) => setIsInstitutional(e.target.checked)}
+              className="w-4 h-4 text-govt-navy rounded focus:ring-govt-navy cursor-pointer"
+            />
+            <label htmlFor="isInstitutional" className="text-xs text-slate-700 cursor-pointer font-semibold">
+              Rule 3 Exemption: Declared for Institutional / Industrial Use ($> 25\text{kg/L}$)
+            </label>
+          </div>
+        </div>
+
+        {/* 5. Submit Action Button */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-govt-navy hover:bg-slate-900 text-white font-extrabold text-xs sm:text-sm py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 disabled:opacity-50 min-h-[48px]"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+              <span>Running OCR &amp; Legal Metrology Rule Engine Pipeline...</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              <span>RUN LEGAL METROLOGY INSPECTION &amp; GENERATE CERTIFICATE</span>
+            </>
+          )}
+        </button>
+      </form>
     </div>
   );
 }
