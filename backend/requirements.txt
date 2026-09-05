@@ -6,3 +6,6 @@ opencv-python-headless>=4.9.0.80
 pillow>=10.2.0
 reportlab>=4.1.0
 numpy>=1.26.0
+easyocr>=1.7.0
+pytesseract>=0.3.10
+ultralytics>=8.1.0

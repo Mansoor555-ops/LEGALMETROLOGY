@@ -1,127 +1,105 @@
 import os
-import json
+import logging
+import cv2
 import numpy as np
 from typing import Tuple, Dict, Any, List
 
-_trained_knn_model = None
+logger = logging.getLogger(__name__)
 
-def get_knn_model():
-    global _trained_knn_model
-    if _trained_knn_model is not None:
-        return _trained_knn_model
+_yolo_model = None
 
-    model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "models", "legal_metrology_knn.json"))
-    if os.path.exists(model_path):
+def get_yolo_model():
+    global _yolo_model
+    if _yolo_model is None:
         try:
-            with open(model_path, "r") as f:
-                _trained_knn_model = json.load(f)
-            print(f"[ML MODEL] Loaded custom trained Legal Metrology model from {model_path}")
-            return _trained_knn_model
+            from ultralytics import YOLO
+            logger.info("Initializing pretrained Ultralytics YOLOv8 detector (yolov8n.pt)...")
+            _yolo_model = YOLO("yolov8n.pt")
+            logger.info("Ultralytics YOLOv8 detector initialized.")
         except Exception as e:
-            print(f"[ML MODEL LOAD WARNING] Could not load model JSON: {e}")
-    return None
-
-def extract_features(crop: np.ndarray, cx: float, cy: float, w: float, h: float) -> np.ndarray:
-    import cv2
-    aspect_ratio = float(w) / (h + 1e-5)
-    area = float(w * h)
-
-    mean_val, std_val = cv2.meanStdDev(crop)
-    r_mean, g_mean, b_mean = float(mean_val[2][0]), float(mean_val[1][0]), float(mean_val[0][0])
-    r_std, g_std, b_std = float(std_val[2][0]), float(std_val[1][0]), float(std_val[0][0])
-
-    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-    sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-    edge_density = float(np.mean(np.abs(sobelx) + np.abs(sobely)))
-
-    features = [cx, cy, w, h, aspect_ratio, area, r_mean, g_mean, b_mean, r_std, g_std, edge_density]
-    return np.array(features, dtype=np.float64)
-
-def classify_region_crop(crop: np.ndarray, cx: float, cy: float, w: float, h: float) -> int:
-    model = get_knn_model()
-    if model is None:
-        return -1
-
-    feats = extract_features(crop, cx, cy, w, h)
-    mean = np.array(model["mean"])
-    std = np.array(model["std"])
-    X_train = np.array(model["X_train"])
-    Y_train = np.array(model["Y_train"])
-
-    feat_norm = (feats - mean) / std
-    distances = np.linalg.norm(X_train - feat_norm, axis=1)
-    k_indices = np.argsort(distances)[:model["k"]]
-    k_labels = Y_train[k_indices]
-    counts = np.bincount(k_labels)
-    return int(np.argmax(counts))
+            logger.warning(f"Ultralytics YOLOv8 initialization note (using heuristic fallback): {e}")
+            _yolo_model = False
+    return _yolo_model if _yolo_model else None
 
 def detect_and_crop_regions(image_bytes: bytes) -> Tuple[Dict[str, bytes], Dict[str, Any]]:
     """
-    Detection-First Stage 1 & 2:
-    Locates spatial region bounding boxes on the label using custom trained Legal Metrology model
-    and crops each region into an isolated byte stream for targeted OCR.
+    Detection Stage:
+    1. Uses Ultralytics YOLOv8 pretrained model to locate general product/container bounding box if available.
+    2. Uses honest fixed-region slicing heuristic (`fixed_region_heuristic_cropper`) as a robust fallback.
     """
     regions_map = {}
     metadata = {"methods": []}
 
+    if not image_bytes:
+        return {
+            "header": b"",
+            "declarations": b"",
+            "manufacturer": b"",
+            "barcode": b""
+        }, {"methods": ["failed_empty_input"]}
+
     try:
-        import cv2
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img is not None:
-            h, w, _ = img.shape
-            metadata["original_size"] = [w, h]
+        if img is None:
+            raise ValueError("Failed to decode image bytes into OpenCV matrix")
 
-            model = get_knn_model()
-            if model is not None:
-                metadata["methods"].append("custom_legal_metrology_ml_inference")
-                # Classify candidate bounding region slices
-                slices = [
-                    (0.5, 0.175, 1.0, 0.35, 0),  # top / header
-                    (0.5, 0.50,  1.0, 0.60, 1),  # center / declarations
-                    (0.5, 0.75,  1.0, 0.50, 5),  # lower / manufacturer
-                    (0.7, 0.775, 0.6, 0.45, 7)   # lower right / barcode
-                ]
-                for cx, cy, sw, sh, default_cls in slices:
-                    x1, y1 = int(max(0, (cx - sw/2)*w)), int(max(0, (cy - sh/2)*h))
-                    x2, y2 = int(min(w, (cx + sw/2)*w)), int(min(h, (cy + sh/2)*h))
-                    crop = img[y1:y2, x1:x2]
-                    if crop.size > 0:
-                        pred_cls = classify_region_crop(crop, cx, cy, sw, sh)
-                        cls_to_use = pred_cls if pred_cls >= 0 else default_cls
-                        _, enc = cv2.imencode('.jpg', crop)
-                        
-                        if cls_to_use == 0:
-                            regions_map["header"] = enc.tobytes()
-                        elif cls_to_use in [1, 2, 3, 4]:
-                            regions_map["declarations"] = enc.tobytes()
-                        elif cls_to_use in [5, 6]:
-                            regions_map["manufacturer"] = enc.tobytes()
-                        elif cls_to_use == 7:
-                            regions_map["barcode"] = enc.tobytes()
+        h, w, _ = img.shape
+        metadata["original_size"] = [w, h]
 
-            # Ensure all fallback region fields exist
-            if "header" not in regions_map:
-                _, enc = cv2.imencode('.jpg', img[0:int(h * 0.35), 0:w])
-                regions_map["header"] = enc.tobytes()
+        # 1. Attempt Real YOLOv8 Object Detection
+        target_crop = img
+        yolo_model = get_yolo_model()
+        if yolo_model is not None:
+            try:
+                results = yolo_model(img, verbose=False)
+                if results and len(results) > 0 and len(results[0].boxes) > 0:
+                    # Pick bounding box with largest area
+                    best_box = None
+                    max_area = 0
+                    for box in results[0].boxes:
+                        xyxy = box.xyxy[0].cpu().numpy()
+                        bw = xyxy[2] - xyxy[0]
+                        bh = xyxy[3] - xyxy[1]
+                        area = bw * bh
+                        if area > max_area:
+                            max_area = area
+                            best_box = xyxy
 
-            if "declarations" not in regions_map:
-                _, enc = cv2.imencode('.jpg', img[int(h * 0.20):int(h * 0.80), 0:w])
-                regions_map["declarations"] = enc.tobytes()
+                    if best_box is not None and max_area > (0.05 * w * h):
+                        bx1, by1, bx2, by2 = map(int, best_box)
+                        bx1, by1 = max(0, bx1), max(0, by1)
+                        bx2, by2 = min(w, bx2), min(h, by2)
+                        target_crop = img[by1:by2, bx1:bx2]
+                        metadata["methods"].append("ultralytics_yolov8_object_detection")
+                        metadata["detected_bbox"] = [bx1, by1, bx2, by2]
+            except Exception as e:
+                logger.warning(f"YOLOv8 inference note (falling back to region heuristic): {e}")
 
-            if "manufacturer" not in regions_map:
-                _, enc = cv2.imencode('.jpg', img[int(h * 0.50):h, 0:w])
-                regions_map["manufacturer"] = enc.tobytes()
+        # 2. Slice cropped product area into functional regions using fixed-region heuristic
+        ch, cw, _ = target_crop.shape
+        metadata["methods"].append("fixed_region_heuristic_cropper")
 
-            if "barcode" not in regions_map:
-                _, enc = cv2.imencode('.jpg', img[int(h * 0.55):h, int(w * 0.40):w])
-                regions_map["barcode"] = enc.tobytes()
+        # Top / Header (0-35% height)
+        _, header_enc = cv2.imencode('.jpg', target_crop[0:int(ch * 0.35), 0:cw])
+        regions_map["header"] = header_enc.tobytes()
 
-            metadata["methods"].append("spatial_region_segmentation")
-            return regions_map, metadata
+        # Center / Declarations (20-80% height)
+        _, decl_enc = cv2.imencode('.jpg', target_crop[int(ch * 0.20):int(ch * 0.80), 0:cw])
+        regions_map["declarations"] = decl_enc.tobytes()
+
+        # Lower / Manufacturer (50-100% height)
+        _, mfg_enc = cv2.imencode('.jpg', target_crop[int(ch * 0.50):ch, 0:cw])
+        regions_map["manufacturer"] = mfg_enc.tobytes()
+
+        # Lower Right / Barcode (55-100% height, 40-100% width)
+        _, bc_enc = cv2.imencode('.jpg', target_crop[int(ch * 0.55):ch, int(cw * 0.40):cw])
+        regions_map["barcode"] = bc_enc.tobytes()
+
+        return regions_map, metadata
+
     except Exception as e:
-        print(f"Region segmentation note: {e}")
+        logger.error(f"Region detection error: {e}", exc_info=True)
 
     regions_map = {
         "header": image_bytes,
@@ -129,8 +107,8 @@ def detect_and_crop_regions(image_bytes: bytes) -> Tuple[Dict[str, bytes], Dict[
         "manufacturer": image_bytes,
         "barcode": image_bytes
     }
+    metadata["methods"].append("raw_image_fallback")
     return regions_map, metadata
-
 
 def crop_label_region(image_bytes: bytes) -> Tuple[bytes, Dict[str, Any]]:
     """
@@ -138,4 +116,3 @@ def crop_label_region(image_bytes: bytes) -> Tuple[bytes, Dict[str, Any]]:
     """
     regions, meta = detect_and_crop_regions(image_bytes)
     return regions.get("declarations", image_bytes), meta
-

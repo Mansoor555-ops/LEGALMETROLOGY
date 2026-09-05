@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Camera, Zap, ShieldCheck, AlertTriangle, FileText, CheckCircle2, ArrowRight, RefreshCw, Layers, Loader2 } from 'lucide-react';
-import UnifiedAutoScanner from './UnifiedAutoScanner';
+import SmartCaptureCamera from './SmartCaptureCamera';
 import OfficerInspectionForm from './OfficerInspectionForm';
 import { getApiBaseUrl } from '@/utils/api';
 import { UserSession } from './LoginPage';
@@ -124,9 +124,9 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
         </div>
       )}
 
-      {/* Scanner Modal Launcher */}
+      {/* Smart Capture Camera Launcher */}
       {showAutoScanner && (
-        <UnifiedAutoScanner
+        <SmartCaptureCamera
           onScanComplete={handleScanCompleteFromScanner}
           onClose={() => setShowAutoScanner(false)}
         />

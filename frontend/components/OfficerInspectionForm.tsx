@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import { AlertTriangle, CheckCircle2, ShieldAlert, Loader2, Camera, QrCode, Zap, Sparkles, FileText, Check, Trash2, Plus } from 'lucide-react';
 import GeolocationBadge from './GeolocationBadge';
 import BarcodeScanner from './BarcodeScanner';
+import SmartCaptureCamera from './SmartCaptureCamera';
 import { getApiBaseUrl } from '@/utils/api';
 
 interface OfficerInspectionFormProps {
@@ -23,6 +24,7 @@ export default function OfficerInspectionForm({
   const [netQuantity, setNetQuantity] = useState('');
   const [isInstitutional, setIsInstitutional] = useState(false);
   const [barcodeCode, setBarcodeCode] = useState(scannedBarcodeCode);
+  const [showSmartCamera, setShowSmartCamera] = useState(false);
 
   const [gpsData, setGpsData] = useState<{
     latitude?: number;
@@ -71,6 +73,15 @@ export default function OfficerInspectionForm({
       const newPreviews = newFiles.map(f => URL.createObjectURL(f));
 
       setBottleImages(prev => [...prev, ...newFiles]);
+      setBottlePreviews(prev => [...prev, ...newPreviews]);
+    }
+  };
+
+  const handleSmartCameraComplete = (files: File[]) => {
+    setShowSmartCamera(false);
+    if (files && files.length > 0) {
+      const newPreviews = files.map(f => URL.createObjectURL(f));
+      setBottleImages(prev => [...prev, ...files]);
       setBottlePreviews(prev => [...prev, ...newPreviews]);
     }
   };
@@ -154,6 +165,14 @@ export default function OfficerInspectionForm({
         onChange={handleNativeCameraChange}
       />
 
+      {showSmartCamera && (
+        <SmartCaptureCamera
+          onScanComplete={handleSmartCameraComplete}
+          onClose={() => setShowSmartCamera(false)}
+          category={category}
+        />
+      )}
+
       <form onSubmit={executePipeline} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-6">
         <div className="border-b border-slate-200 pb-3 flex justify-between items-center">
           <div>
@@ -187,14 +206,24 @@ export default function OfficerInspectionForm({
               <Camera className="w-4 h-4 text-govt-navy" />
               Scanned Package Label Photos ({bottleImages.length})
             </span>
-            <button
-              type="button"
-              onClick={() => nativeCameraInputRef.current?.click()}
-              className="text-xs text-govt-navy font-bold hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Label Photos
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowSmartCamera(true)}
+                className="text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                Live Smart Camera
+              </button>
+              <button
+                type="button"
+                onClick={() => nativeCameraInputRef.current?.click()}
+                className="text-xs text-govt-navy font-bold hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Upload / File Input
+              </button>
+            </div>
           </div>
 
           {bottlePreviews.length > 0 ? (
@@ -217,11 +246,11 @@ export default function OfficerInspectionForm({
             </div>
           ) : (
             <div
-              onClick={() => nativeCameraInputRef.current?.click()}
+              onClick={() => setShowSmartCamera(true)}
               className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500 text-xs hover:border-govt-navy hover:bg-slate-100 transition-colors cursor-pointer space-y-2"
             >
               <Camera className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="font-semibold text-slate-700">Click to attach or snap package label images</p>
+              <p className="font-semibold text-slate-700">Click to open Smart Camera or attach package label images</p>
               <p className="text-[11px] text-slate-400">Supports multi-angle JPEG, PNG packaging labels &amp; bottle photos</p>
             </div>
           )}

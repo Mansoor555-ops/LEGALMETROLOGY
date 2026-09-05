@@ -47,44 +47,55 @@ def evaluate_exemption(net_qty_str: str, is_institutional: bool) -> Tuple[bool, 
     return False, ""
 
 def extract_company_name_and_address(full_text: str, lines: List[Dict[str, Any]]) -> Tuple[str, float]:
+    """
+    Rely strictly on generic keyword patterns (mfd by, packed by, etc.)
+    and corporate suffix patterns (Pvt Ltd, Ltd, Inc).
+    NO HARDCODED FICTIONAL BRANDS.
+    """
     mfg_keywords = [
         r"(mfd|manufactured|marketed|packed|imported)\s?(by|for)?[:\s]?",
         r"mfg\.?\s?by[:\s]?",
-        r"packed\s?&\s?marketed\s?by[:\s]?",
-        r"purefoods|glowcare|nature fresh|apex consumer|chemindustrial"
+        r"packed\s?&\s?marketed\s?by[:\s]?"
     ]
 
     extracted_company = ""
     confidence = 0.0
 
     for idx, l in enumerate(lines):
-        line_text = l["text"]
+        line_text = l.get("text", "")
+        line_conf = l.get("confidence", 0.70)
         for kw in mfg_keywords:
             if re.search(kw, line_text, re.IGNORECASE):
                 match = re.split(kw, line_text, flags=re.IGNORECASE)
                 candidate = match[-1].strip() if len(match) > 1 else line_text.strip()
                 address_parts = [candidate]
                 if idx + 1 < len(lines):
-                    next_line = lines[idx + 1]["text"]
+                    next_line = lines[idx + 1].get("text", "")
                     if any(addr_kw in next_line.lower() for addr_kw in ["plot", "sector", "phase", "ind", "area", "estate", "road", "street", "delhi", "mumbai", "bengaluru", "kolkata", "chennai", "pin", "pvt", "ltd", "hr", "mh", "hp"]):
                         address_parts.append(next_line.strip())
 
                 extracted_company = ", ".join([p for p in address_parts if p])
-                confidence = l.get("confidence", 0.90)
+                confidence = float(line_conf)
                 break
         if extracted_company:
             break
 
     if not extracted_company:
-        corp_match = re.search(r"([A-Za-z0-9\s]{3,40}\s?(Pvt\.?\s?Ltd|Ltd|Organics|Foods|Industries|Enterprises|Chemicals|Inc|Corp|Products))", full_text, re.IGNORECASE)
+        corp_match = re.search(r"([A-Za-z0-9\s]{3,40}\s?(Pvt\.?\s?Ltd|Private Limited|Ltd|Limited|Organics|Foods|Industries|Enterprises|Chemicals|Inc|Corp|Products))", full_text, re.IGNORECASE)
         if corp_match:
             extracted_company = f"Manufactured by {corp_match.group(1).strip()}"
-            confidence = 0.88
+            # Find matching line confidence
+            for l in lines:
+                if corp_match.group(1).strip() in l.get("text", ""):
+                    confidence = float(l.get("confidence", 0.65))
+                    break
+            if confidence == 0.0:
+                confidence = 0.65
 
     if not extracted_company:
         return "Not found", 0.0
 
-    return extracted_company, confidence
+    return extracted_company, round(confidence, 2)
 
 def classify_product_category(full_text: str) -> str:
     text_lower = full_text.lower()
@@ -125,7 +136,12 @@ def evaluate_rules_for_panel(ocr_result: Dict[str, Any], category: str = "", pan
             if comp_name != "Not found":
                 extracted_text = comp_name
                 confidence = comp_conf
-                status = "PASS" if confidence >= 0.6 else "NEEDS_HUMAN_REVIEW"
+                if confidence >= 0.70:
+                    status = "PASS"
+                elif confidence >= 0.40:
+                    status = "NEEDS_HUMAN_REVIEW"
+                else:
+                    status = "FAIL"
             else:
                 extracted_text = "Not found"
                 confidence = 0.0
@@ -151,25 +167,31 @@ def evaluate_rules_for_panel(ocr_result: Dict[str, Any], category: str = "", pan
                 has_tax_phrase = any(phrase in full_text.lower() for phrase in must_contain_phrases) or "tax" in full_text.lower() or "incl" in full_text.lower() or "inclusive" in full_text.lower()
                 
                 for l in lines:
-                    if mrp_match in l["text"] or re.search(r"mrp|rs|₹|price", l["text"], re.IGNORECASE):
+                    if mrp_match in l.get("text", "") or re.search(r"mrp|rs|₹|price", l.get("text", ""), re.IGNORECASE):
                         extracted_text = l["text"]
-                        confidence = l.get("confidence", 0.90)
-                        bbox = l.get("bbox", [0,0,0,0])
+                        confidence = float(l.get("confidence", 0.70))
+                        bbox = l.get("bbox", [0, 0, 0, 0])
                         break
                 if not extracted_text:
                     extracted_text = mrp_match
-                    confidence = 0.90
+                    confidence = 0.65
 
                 if has_tax_phrase:
                     if "inclusive" not in extracted_text.lower() and "incl" not in extracted_text.lower():
                         extracted_text += " (inclusive of all taxes)"
-                    status = "PASS" if confidence >= 0.5 else "NEEDS_HUMAN_REVIEW"
+                    if confidence >= 0.70:
+                        status = "PASS"
+                    elif confidence >= 0.40:
+                        status = "NEEDS_HUMAN_REVIEW"
+                    else:
+                        status = "FAIL"
                 else:
                     status = "FAIL"
                     extracted_text += " [MISSING MANDATORY CLAUSE: 'inclusive of all taxes']"
             else:
                 status = "FAIL"
                 extracted_text = "Not found"
+                confidence = 0.0
 
         # 3. Net Quantity
         elif field_key == "net_quantity":
@@ -184,10 +206,24 @@ def evaluate_rules_for_panel(ocr_result: Dict[str, Any], category: str = "", pan
                 if m:
                     qty_match = m.group(0)
                     break
+
             if qty_match:
                 extracted_text = qty_match
-                confidence = 0.92
-                status = "PASS"
+                # Derive confidence directly from OCR line
+                for l in lines:
+                    if qty_match.lower() in l.get("text", "").lower():
+                        confidence = float(l.get("confidence", 0.75))
+                        bbox = l.get("bbox", [0, 0, 0, 0])
+                        break
+                if confidence == 0.0:
+                    confidence = 0.70
+
+                if confidence >= 0.70:
+                    status = "PASS"
+                elif confidence >= 0.40:
+                    status = "NEEDS_HUMAN_REVIEW"
+                else:
+                    status = "FAIL"
             else:
                 extracted_text = "Not found"
                 confidence = 0.0
@@ -206,10 +242,23 @@ def evaluate_rules_for_panel(ocr_result: Dict[str, Any], category: str = "", pan
                 if m:
                     date_match = m.group(0)
                     break
+
             if date_match:
                 extracted_text = date_match
-                confidence = 0.89
-                status = "PASS"
+                for l in lines:
+                    if date_match.lower() in l.get("text", "").lower():
+                        confidence = float(l.get("confidence", 0.75))
+                        bbox = l.get("bbox", [0, 0, 0, 0])
+                        break
+                if confidence == 0.0:
+                    confidence = 0.70
+
+                if confidence >= 0.70:
+                    status = "PASS"
+                elif confidence >= 0.40:
+                    status = "NEEDS_HUMAN_REVIEW"
+                else:
+                    status = "FAIL"
             else:
                 extracted_text = "Not found"
                 confidence = 0.0
@@ -229,10 +278,23 @@ def evaluate_rules_for_panel(ocr_result: Dict[str, Any], category: str = "", pan
                 if m:
                     cc_match = m.group(0)
                     break
+
             if cc_match:
                 extracted_text = cc_match
-                confidence = 0.88
-                status = "PASS"
+                for l in lines:
+                    if cc_match.lower() in l.get("text", "").lower():
+                        confidence = float(l.get("confidence", 0.75))
+                        bbox = l.get("bbox", [0, 0, 0, 0])
+                        break
+                if confidence == 0.0:
+                    confidence = 0.70
+
+                if confidence >= 0.70:
+                    status = "PASS"
+                elif confidence >= 0.40:
+                    status = "NEEDS_HUMAN_REVIEW"
+                else:
+                    status = "FAIL"
             else:
                 extracted_text = "Not found"
                 confidence = 0.0
@@ -240,36 +302,69 @@ def evaluate_rules_for_panel(ocr_result: Dict[str, Any], category: str = "", pan
 
         # 6. Common / Generic Name
         elif field_key == "generic_name":
+            # NO lines[0] FALLBACK! Reference list starting set:
+            commodities = [
+                "packaged drinking water", "mineral water", "refined sunflower oil", "whole wheat atta",
+                "wheat flour", "organic honey", "almond milk", "tea powder", "face wash", "dark chocolate",
+                "fruit juice", "potato chips", "biscuit", "shampoo", "hand wash", "detergent powder", "liquid soap"
+            ]
             name_match = None
-            commodities = ["packaged drinking water", "refined sunflower oil", "whole wheat atta", "organic honey", "almond milk", "tea powder", "face wash", "dark chocolate"]
+            matching_line_conf = 0.0
+
             for comm in commodities:
                 if comm in full_text.lower():
                     name_match = comm.title()
+                    for l in lines:
+                        if comm in l.get("text", "").lower():
+                            matching_line_conf = float(l.get("confidence", 0.85))
+                            break
                     break
+
             if name_match:
                 extracted_text = name_match
-                confidence = 0.95
-                status = "PASS"
-            elif lines and len(lines) > 0:
-                extracted_text = lines[0]["text"]
-                confidence = 0.85
-                status = "PASS"
+                confidence = matching_line_conf if matching_line_conf > 0 else 0.80
+                status = "PASS" if confidence >= 0.70 else "NEEDS_HUMAN_REVIEW"
             else:
-                extracted_text = inferred_category
-                confidence = 0.75
-                status = "PASS"
+                # Heuristic noun phrase check: short line near top excluding brand words
+                heuristic_match = None
+                for l in lines[:3]:
+                    txt = l.get("text", "").strip()
+                    if 3 <= len(txt) <= 35 and not re.search(r"(mrp|rs|₹|pvt|ltd|mfg|net|batch)", txt, re.IGNORECASE):
+                        heuristic_match = txt
+                        matching_line_conf = float(l.get("confidence", 0.55))
+                        break
+
+                if heuristic_match:
+                    extracted_text = f"{heuristic_match} (Heuristic match)"
+                    confidence = round(matching_line_conf * 0.9, 2)
+                    status = "NEEDS_HUMAN_REVIEW"
+                else:
+                    extracted_text = "Not confidently detected"
+                    confidence = 0.0
+                    status = "NEEDS_HUMAN_REVIEW"
 
         # 7. Country of Origin
         elif field_key == "country_of_origin":
-            origin_match = re.search(r"(country of origin|made in|product of)\s*:?\s*([a-zA-in]+)", full_text, re.IGNORECASE)
+            origin_match = re.search(r"(country of origin|made in|product of|imported from)\s*:?\s*([a-zA-Z\s]+)", full_text, re.IGNORECASE)
             if origin_match:
-                extracted_text = origin_match.group(0)
-                confidence = 0.95
-                status = "PASS"
+                extracted_text = origin_match.group(0).strip()
+                for l in lines:
+                    if origin_match.group(0).strip().lower() in l.get("text", "").lower():
+                        confidence = float(l.get("confidence", 0.85))
+                        break
+                if confidence == 0.0:
+                    confidence = 0.80
+                status = "PASS" if confidence >= 0.70 else "NEEDS_HUMAN_REVIEW"
             else:
-                extracted_text = "Not specified (Optional)"
-                confidence = 1.0
-                status = "PASS"
+                # If imported keyword is present without origin, FAIL. Otherwise NOT_APPLICABLE for domestic goods.
+                if re.search(r"import(ed|er)?", full_text, re.IGNORECASE):
+                    extracted_text = "Missing mandatory origin declaration for imported commodity"
+                    confidence = 0.0
+                    status = "FAIL"
+                else:
+                    extracted_text = "Not specified (Optional for domestic commodities)"
+                    confidence = 1.0
+                    status = "NOT_APPLICABLE"
 
         field_results.append({
             "rule_id": rule_id,

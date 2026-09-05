@@ -3,7 +3,7 @@ from typing import Dict, List, Any, Tuple
 def merge_multi_panel_results(panel_results_map: Dict[str, List[Dict[str, Any]]]) -> Tuple[List[Dict[str, Any]], str]:
     """
     Merges extracted fields across Front, Back, and Neck panels.
-    If a field is PASS in ANY image panel, it counts as PASS (with highest confidence panel recorded).
+    Priority hierarchy: PASS > NOT_APPLICABLE > NEEDS_HUMAN_REVIEW > FAIL.
     """
     if not panel_results_map:
         return [], "FAIL"
@@ -35,15 +35,22 @@ def merge_multi_panel_results(panel_results_map: Dict[str, List[Dict[str, Any]]]
             best = max(pass_candidates, key=lambda x: x["confidence"])
             merged_fields.append(best)
             continue
+
+        # Priority 2: Pick NOT_APPLICABLE candidate (e.g. optional domestic origin)
+        na_candidates = [c for c in candidates if c["status"] == "NOT_APPLICABLE"]
+        if na_candidates:
+            best = max(na_candidates, key=lambda x: x["confidence"])
+            merged_fields.append(best)
+            continue
             
-        # Priority 2: Pick best NEEDS_HUMAN_REVIEW candidate
+        # Priority 3: Pick best NEEDS_HUMAN_REVIEW candidate
         review_candidates = [c for c in candidates if c["status"] == "NEEDS_HUMAN_REVIEW"]
         if review_candidates:
             best = max(review_candidates, key=lambda x: x["confidence"])
             merged_fields.append(best)
             continue
 
-        # Priority 3: Pick candidate with longest non-empty extracted text or first candidate
+        # Priority 4: Pick candidate with longest non-empty extracted text or first candidate
         best = max(candidates, key=lambda x: len(x.get("extracted_text", "")))
         merged_fields.append(best)
 

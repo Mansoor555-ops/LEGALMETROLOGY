@@ -1,11 +1,12 @@
 export function getApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+  }
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname || 'localhost';
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('10.') || hostname.startsWith('192.168.')) {
       return `http://${hostname}:8000`;
     }
-    // Vercel Production Deployment: API routes are proxied relatively via vercel.json
-    return '';
   }
   return 'http://localhost:8000';
 }
