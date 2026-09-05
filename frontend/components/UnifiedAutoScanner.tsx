@@ -434,20 +434,25 @@ export default function UnifiedAutoScanner({ onScanComplete, onClose, category =
     }
   };
 
-  const handleNativeCameraFallback = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNativeCameraFallback = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (scanStep === 1) {
-        setFrontFile(file);
-        setScanStep(2);
-      } else if (scanStep === 2) {
-        setBackFile(file);
-        setScanStep(3);
-      } else {
-        setBarcodeFile(file);
-        onScanComplete(frontFile || file, file, barcodeCode);
-        onClose();
-      }
+      
+      // Perform fast live-check analysis on the snapped mobile image
+      setIsCheckingLive(true);
+      const res = await performLiveCheck(file, panelName, category);
+      setIsCheckingLive(false);
+
+      const checklist = (res && res.detected_fields) ? res.detected_fields : liveDetectedFields;
+      const previewUrl = URL.createObjectURL(file);
+
+      setPreviewImageSrc(previewUrl);
+      setPreviewChecklist(checklist);
+      setIsPreviewMode(true);
+
+      if (scanStep === 1) setFrontFile(file);
+      else if (scanStep === 2) setBackFile(file);
+      else setBarcodeFile(file);
     }
   };
 
