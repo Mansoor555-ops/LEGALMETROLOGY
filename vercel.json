@@ -6,18 +6,14 @@
       "use": "@vercel/next"
     },
     {
-      "src": "backend/api/index.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "backend/api/index.py"
-    },
-    {
-      "src": "/uploads/(.*)",
-      "dest": "backend/uploads/$1"
+      "dest": "api/index.py"
     },
     {
       "src": "/(.*)",

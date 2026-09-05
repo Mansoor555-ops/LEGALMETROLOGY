@@ -1,0 +1,22 @@
+# Exclude local virtual environment (prevents 6GB bundle size error)
+venv/
+backend/venv/
+*/venv/
+
+# Exclude local training datasets and runs
+dataset/
+backend/dataset/
+runs/
+backend/runs/
+
+# Exclude local build artifacts and dependencies
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+frontend/out/
+
+# Database files & uploads
+*.db
+backend/*.db
+backend/uploads/
