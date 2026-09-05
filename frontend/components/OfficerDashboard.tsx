@@ -87,7 +87,12 @@ export default function OfficerDashboard({ session, onSelectInspection }: Office
       }
     } catch (err: any) {
       setIsAnalyzing(false);
-      setErrorMsg(err.message || 'Error connecting to Legal Metrology enforcement server.');
+      const apiBase = getApiBaseUrl();
+      if (err.name === 'TypeError' || err.message === 'Failed to fetch' || err.message?.includes('fetch')) {
+        setErrorMsg(`Unable to connect to enforcement backend server at (${apiBase}). Please ensure backend is running on port 8000.`);
+      } else {
+        setErrorMsg(err.message || 'Error connecting to Legal Metrology enforcement server.');
+      }
     }
   };
 

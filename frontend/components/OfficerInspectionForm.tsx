@@ -147,7 +147,12 @@ export default function OfficerInspectionForm({
       }
     } catch (err: any) {
       setLoading(false);
-      setError(err.message || 'Error connecting to enforcement backend server');
+      const apiBase = getApiBaseUrl();
+      if (err.name === 'TypeError' || err.message === 'Failed to fetch' || err.message?.includes('fetch')) {
+        setError(`Unable to connect to enforcement backend server at (${apiBase}). Please ensure backend Python server is running on port 8000.`);
+      } else {
+        setError(err.message || 'Error connecting to enforcement backend server');
+      }
     }
   };
 

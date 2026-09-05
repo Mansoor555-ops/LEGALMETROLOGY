@@ -4,8 +4,16 @@ export function getApiBaseUrl(): string {
   }
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname || 'localhost';
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('10.') || hostname.startsWith('192.168.')) {
+    const protocol = window.location.protocol || 'http:';
+
+    // If running on local network IP, localhost, 127.0.0.1, or local Wi-Fi / hotspot
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return `http://${hostname}:8000`;
+    }
+
+    // If accessing via any IP address (e.g. 192.168.x.x, 172.x.x.x, 10.x.x.x) or local dev domain (non-vercel)
+    if (!hostname.endsWith('.vercel.app') && !hostname.endsWith('.netlify.app')) {
+      return `${protocol}//${hostname}:8000`;
     }
   }
   return 'http://localhost:8000';
@@ -36,17 +44,21 @@ export async function performLiveCheck(imageBlob: Blob, panel: string, category:
     formData.append('category', category);
 
     const apiBase = getApiBaseUrl();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(`${apiBase}/api/inspect/live-check`, {
       method: 'POST',
       body: formData,
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
 
     if (!response.ok) return null;
     const data = await response.json();
     return data as LiveCheckResult;
   } catch (err) {
     // Fail silently in UX polling loop
-    console.warn("Live check background loop note:", err);
     return null;
   }
 }
