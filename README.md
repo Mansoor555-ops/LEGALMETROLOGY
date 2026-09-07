@@ -1,40 +1,36 @@
-# Legal Metrology Compliance Assistant (SIH PS 26034)
+# Legal Metrology (Packaged Commodities) Compliance Assistant
 
-Official Legal Metrology (Packaged Commodities) Rules 2011 Compliance Enforcement Tool for Field Inspectors.
+Production-grade monorepo system for automated Legal Metrology (Packaged Commodities) Rules, 2011 enforcement checking powered by **Google Gemini 1.5 Vision API**, **n8n workflow orchestration**, **MongoDB Atlas**, and a **Hybrid RAG Rule Engine**.
 
-## Architecture & Deployment Setup
+## Repository Structure
 
-### Architecture Overview
-- **Frontend**: Next.js 14+ (React 18, TypeScript, Tailwind CSS) — Deployed on Vercel.
-- **Backend**: Python 3.12, FastAPI, Uvicorn, EasyOCR, PyTesseract, OpenCV, Ultralytics YOLOv8, ReportLab PDF — Deployed as a long-running container service (Docker / Railway / Render / VM).
-
-> [!IMPORTANT]
-> **Deployment Architecture & Memory Requirements**
-> - The Python backend must **NOT** be deployed as a Vercel Serverless Function because PyTorch/EasyOCR exceeds serverless size (500MB+) and execution timeout limits.
-> - **Minimum System Hardware**: Minimum **2GB RAM** (4GB recommended) for EasyOCR neural network model inference and image processing.
-> - **System Dependencies**: If using PyTesseract as a secondary OCR fallback, ensure the system Tesseract binary is installed (`apt-get install tesseract-ocr`). EasyOCR runs natively out-of-the-box via PyTorch.
-
-### Local Development Setup
-
-#### Backend Setup
-```bash
-cd backend
-python -m venv venv
-.\venv\Scripts\activate  # On Windows
-pip install -r requirements.txt
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+legal-metrology-compliance/
+├── frontend/             # Next.js 14 App Router Government UI Portal
+│   └── src/
+│       ├── app/          # Main routes and dashboard pages
+│       ├── components/   # Capture, Dashboard, Inspection & Shared components
+│       ├── lib/          # API & Webhook client utilities
+│       └── types/        # TypeScript interfaces
+├── backend/              # FastAPI Async Microservice
+│   └── src/
+│       ├── main.py       # FastAPI entrypoint
+│       ├── api/routes/   # Inspections, Products, Webhooks, Reports
+│       ├── services/     # Gemini Vision client, Hybrid Rule Engine, RAG, PDF Generator
+│       ├── models/       # Pydantic data schemas
+│       └── db/           # Motor Async MongoDB client
+│   └── data/             # Legal Metrology 2011 Rules & FAISS Index
+├── n8n/
+│   └── workflows/        # Exported n8n inspection pipeline JSON workflow
+├── docs/                 # System Architecture & Setup Guides
+├── docker-compose.yml    # Full stack orchestration (Backend + n8n + MongoDB)
+└── README.md
 ```
 
-#### Frontend Setup
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Key Features
 
-### Docker Deployment
-```bash
-cd backend
-docker build -t legal-metrology-backend .
-docker run -d -p 8000:8000 --name legal-metrology-api legal-metrology-backend
-```
+1. **Gemini 1.5 Vision Integration**: Dual parallel calls for visual compliance checking and structured Rule 6 extraction.
+2. **Hybrid Rule Engine**: Objective deterministic validation (MRP tax clause, Net Qty metric units, Mfg Date format, Unit-Price math) combined with FAISS RAG LLM Judge citing exact Legal Metrology 2011 clauses.
+3. **GTIN Product Master & Cross-Seller MRP Tracker**: Detects when identical commodities declared under the same GTIN have conflicting MRPs across sellers/locations.
+4. **Self-Hosted n8n Workflow Orchestration**: Checked-in JSON workflow for asynchronous processing pipelines.
+5. **Government-Aligned UI/UX**: Dense tabular data views, official color palette, regional violation heatmaps, and officer override workflows.

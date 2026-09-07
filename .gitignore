@@ -1,6 +1,16 @@
+# Environment & API Key Secrets (CRITICAL SECURITY PROTECTION)
+.env
+.env.*
+*.env
+backend/.env
+frontend/.env.local
+frontend/.env.production
+frontend/.env.development
+
 # Dependencies
 node_modules/
 backend/venv/
+backend/venv*/
 
 # Next.js
 frontend/.next/
@@ -13,14 +23,22 @@ __pycache__/
 *.pyd
 .pytest_cache/
 
-# Datasets & Trained Runs
-backend/dataset/
-backend/runs/
+# User Uploads, Generated PDF Reports & FAISS Scratch Data
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/reports/*
+!backend/reports/.gitkeep
+backend/data/*
+!backend/data/.gitkeep
+backend/faiss_index/*
+!backend/faiss_index/.gitkeep
+backend/scratch/
 
 # SQLite & Logs
 *.db
 *.log
 
-# Misc
+# System & IDE
 .DS_Store
 *.swp
+.vercel

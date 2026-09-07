@@ -1,0 +1,64 @@
+{
+  "name": "Legal Metrology Inspection Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inspection-pipeline",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:8000/api/inspect",
+        "method": "POST",
+        "options": {}
+      },
+      "name": "Backend Hybrid Rule Engine Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [350, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:8000/api/webhooks/n8n-result",
+        "method": "POST",
+        "options": {}
+      },
+      "name": "MongoDB Persistence Sync",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [600, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Backend Hybrid Rule Engine Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backend Hybrid Rule Engine Call": {
+      "main": [
+        [
+          {
+            "node": "MongoDB Persistence Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {}
+}
