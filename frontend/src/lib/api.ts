@@ -13,6 +13,9 @@ export function getApiBaseUrl(): string {
     if (!hostname.endsWith('.vercel.app') && !hostname.endsWith('.netlify.app')) {
       return `${protocol}//${hostname}:8000`;
     }
+
+    // On Vercel / Netlify hosted app, use relative same-origin paths
+    return '';
   }
   return 'http://localhost:8000';
 }
