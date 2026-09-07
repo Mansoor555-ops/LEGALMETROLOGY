@@ -91,7 +91,9 @@ export default function BarcodeScanner({ onBarcodeDecoded }: BarcodeScannerProps
         setBarcodeInput(code);
 
         // Immediately stop camera stream & ZXing decoder
-        reader.reset();
+        if (typeof (reader as any).reset === 'function') {
+          (reader as any).reset();
+        }
         stopCamera();
 
         // Trigger lookup callback
