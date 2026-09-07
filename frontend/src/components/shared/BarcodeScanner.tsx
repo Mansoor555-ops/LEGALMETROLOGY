@@ -107,7 +107,9 @@ export default function BarcodeScanner({ onBarcodeDecoded }: BarcodeScannerProps
       isSubscribed = false;
       clearTimeout(timeoutTimer);
       try {
-        reader.reset();
+        if (typeof (reader as any).reset === 'function') {
+          (reader as any).reset();
+        }
       } catch {}
     };
   }, [scanMode, stream, stopCamera, handleScanOrLookup]);
