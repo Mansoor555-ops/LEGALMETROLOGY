@@ -32,8 +32,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount Static Uploads
-app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
+# Mount Static Uploads safely
+try:
+    if os.path.exists(settings.UPLOADS_DIR):
+        app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
+except Exception as e:
+    pass
 
 # Register Modular Resource Routers
 app.include_router(inspections.router)
@@ -41,6 +45,8 @@ app.include_router(products.router)
 app.include_router(webhooks.router)
 app.include_router(reports.router)
 
+@app.get("/")
+@app.get("/health")
 @app.get("/api/health")
 def health_check():
     return {
