@@ -10,12 +10,8 @@ export function getApiBaseUrl(): string {
       return `http://${hostname}:8000`;
     }
 
-    if (!hostname.endsWith('.vercel.app') && !hostname.endsWith('.netlify.app')) {
-      return `${protocol}//${hostname}:8000`;
-    }
-
-    // On Vercel / Netlify hosted app, use relative same-origin paths
-    return '';
+    // Default to port 8000 if hosted on custom IP or domain without proxy
+    return `${protocol}//${hostname}:8000`;
   }
   return 'http://localhost:8000';
 }
