@@ -1,8 +1,15 @@
 import os
 import logging
 from typing import List, Tuple, Dict, Any
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import FakeEmbeddings
+try:
+    from langchain_community.vectorstores import FAISS
+    from langchain_community.embeddings import FakeEmbeddings
+    LANGCHAIN_AVAILABLE = True
+except Exception:
+    FAISS = None
+    FakeEmbeddings = None
+    LANGCHAIN_AVAILABLE = False
+
 from ...config import settings
 from .ingest import build_faiss_index, DEFAULT_LEGAL_METROLOGY_CLAUSES
 
@@ -12,6 +19,8 @@ _vectorstore_instance = None
 
 def get_vectorstore():
     global _vectorstore_instance
+    if not LANGCHAIN_AVAILABLE:
+        return None
     if _vectorstore_instance is None:
         index_dir = settings.FAISS_INDEX_PATH
         embeddings = FakeEmbeddings(size=384)
