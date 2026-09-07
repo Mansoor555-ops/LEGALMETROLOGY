@@ -1,3 +1,4 @@
+# Vercel Python Serverless Entrypoint — v2
 import os
 import sys
 import traceback
