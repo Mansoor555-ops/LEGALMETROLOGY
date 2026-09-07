@@ -18,6 +18,7 @@ except Exception:
     GENAI_AVAILABLE = False
 
 from ..config import settings
+from .product_segmenter import segment_and_crop_product
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +47,17 @@ def get_image_hash(image_bytes: bytes) -> str:
 
 def compress_and_downscale_image(image_bytes: bytes) -> Tuple[bytes, int]:
     """
-    Compresses and downscales image payload before transmission to Gemini.
+    Compresses, segments product background, and downscales image payload before transmission to Gemini.
     Default max dimension: 2048px, JPEG quality: 92 (high resolution for fine-print OCR).
     """
+    # 1. Product auto-segmentation & background removal
+    try:
+        segmented_bytes, was_segmented, orig_sz, seg_sz = segment_and_crop_product(image_bytes)
+        if was_segmented:
+            image_bytes = segmented_bytes
+    except Exception as e:
+        logger.warning(f"Product segmentation note: {e}")
+
     max_dim = int(os.getenv("MAX_IMAGE_DIM", "2048"))
     jpeg_quality = int(os.getenv("JPEG_QUALITY", "92"))
 
