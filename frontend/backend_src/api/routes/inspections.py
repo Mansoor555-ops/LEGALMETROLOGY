@@ -62,9 +62,13 @@ async def create_inspection_endpoint(
             ext = file_obj.filename.split(".")[-1] if "." in file_obj.filename else "jpg"
             filename = f"{insp_id}_photo_{idx+1}.{ext}"
             filepath = os.path.join(settings.UPLOADS_DIR, filename)
-            with open(filepath, "wb") as f:
-                f.write(file_bytes)
-            saved_image_paths.append(f"/uploads/{filename}")
+            try:
+                os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
+                with open(filepath, "wb") as f:
+                    f.write(file_bytes)
+                saved_image_paths.append(f"/uploads/{filename}")
+            except Exception as write_err:
+                logger.warning(f"Could not save image to disk ({write_err}); continuing without local save.")
 
             # PART 1: Free OpenCV Pre-Check Gate & Automatic Barcode Decoding
             from ...services.quality import evaluate_image_quality

@@ -177,7 +177,7 @@ Return strictly a JSON object with this exact schema:
 If a field is not printed on this specific image, set present to false, extracted_text to "Not found", and visual_confidence to 0.0.
 """
 
-    models_to_try = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash']
+    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.5-flash-lite-preview-06-17']
     start_time = time.time()
 
     part = types.Part.from_bytes(data=compressed_bytes, mime_type="image/jpeg")

@@ -1,8 +1,10 @@
 import os
+import traceback
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 from .config import settings
 from .db.mongo import connect_to_mongo, close_mongo_connection
@@ -55,3 +57,15 @@ def health_check():
         "environment": settings.ENV,
         "gemini_configured": bool(settings.GEMINI_API_KEY)
     }
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": str(exc),
+            "type": type(exc).__name__,
+            "traceback": traceback.format_exc(),
+            "path": str(request.url)
+        }
+    )
