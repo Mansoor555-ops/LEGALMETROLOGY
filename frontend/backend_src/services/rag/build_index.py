@@ -2,9 +2,16 @@ import os
 import json
 import logging
 from typing import List, Dict, Any, Tuple, Optional
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import FakeEmbeddings
-from langchain_core.documents import Document
+try:
+    from langchain_community.vectorstores import FAISS
+    from langchain_community.embeddings import FakeEmbeddings
+    from langchain_core.documents import Document
+    LANGCHAIN_AVAILABLE = True
+except Exception:
+    FAISS = None
+    FakeEmbeddings = None
+    Document = None
+    LANGCHAIN_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

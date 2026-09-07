@@ -1,11 +1,15 @@
 import os
 import logging
 from typing import List
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import FakeEmbeddings
-from langchain_core.documents import Document
+try:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from langchain_community.document_loaders import PyPDFLoader
+    from langchain_community.vectorstores import FAISS
+    from langchain_community.embeddings import FakeEmbeddings
+    from langchain_core.documents import Document
+    LANGCHAIN_AVAILABLE = True
+except Exception:
+    LANGCHAIN_AVAILABLE = False
 from ...config import settings
 
 logger = logging.getLogger(__name__)
