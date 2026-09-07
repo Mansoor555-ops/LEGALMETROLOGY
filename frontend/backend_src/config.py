@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     N8N_WEBHOOK_URL: str = os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/inspection-pipeline")
     
     # Storage Paths
-    BASE_DIR: str = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    BASE_DIR: str = "/tmp" if (os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")) else os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     UPLOADS_DIR: str = os.path.abspath(os.path.join(BASE_DIR, "uploads"))
     REPORTS_DIR: str = os.path.abspath(os.path.join(BASE_DIR, "reports"))
     DATA_DIR: str = os.path.abspath(os.path.join(BASE_DIR, "data"))
@@ -31,6 +31,9 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
-os.makedirs(settings.REPORTS_DIR, exist_ok=True)
-os.makedirs(settings.DATA_DIR, exist_ok=True)
+try:
+    os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
+    os.makedirs(settings.REPORTS_DIR, exist_ok=True)
+    os.makedirs(settings.DATA_DIR, exist_ok=True)
+except Exception:
+    pass
